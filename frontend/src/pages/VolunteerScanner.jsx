@@ -16,7 +16,6 @@ export default function VolunteerScanner({ onLogout }) {
   const [otpSent, setOtpSent]       = useState(false);
   const [otp, setOtp]               = useState('');
   const [scanCount, setScanCount]   = useState(0);
-  const [countdown, setCountdown]   = useState(0);
 
   const videoRef     = useRef(null);
   const canvasRef    = useRef(null);
@@ -25,8 +24,6 @@ export default function VolunteerScanner({ onLogout }) {
   const isScanRef    = useRef(false);
   const loadingRef   = useRef(false);
   const timerRef     = useRef(null);
-
-  useEffect(() => { loadingRef.current = loading; }, [loading]);
 
   // ── Camera lifecycle ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -85,25 +82,14 @@ export default function VolunteerScanner({ onLogout }) {
     rafRef.current = requestAnimationFrame(scanFrame);
   };
 
-  // ── Reset to scanning state ────────────────────────────────────────────────
+  // Manually reset to scanning state
   const readyForNext = () => {
     clearTimeout(timerRef.current);
-    setCountdown(0);
     setScanResult(null);
     setErrorMsg(null);
     isScanRef.current = false;
   };
 
-  // Auto-dismiss in N seconds with live countdown
-  const startAutoDismiss = (seconds = 5) => {
-    setCountdown(seconds);
-    const tick = (remaining) => {
-      if (remaining <= 0) { readyForNext(); return; }
-      setCountdown(remaining);
-      timerRef.current = setTimeout(() => tick(remaining - 1), 1000);
-    };
-    timerRef.current = setTimeout(() => tick(seconds - 1), 1000);
-  };
 
   // ── QR Verify ─────────────────────────────────────────────────────────────
   const handleVerifyQR = async (rawToken) => {
@@ -128,7 +114,6 @@ export default function VolunteerScanner({ onLogout }) {
       playTone(440, 220, 0.3);
     } finally {
       setLoading(false);
-      startAutoDismiss(5); // 5 second auto-dismiss
     }
   };
 
@@ -311,9 +296,7 @@ export default function VolunteerScanner({ onLogout }) {
                 )}
               </div>
 
-              {/* Bottom Action Bar */}
-              <div className="flex-none p-6 space-y-3">
-                {/* Next person button */}
+              <div className="flex-none p-6">
                 <button
                   onClick={readyForNext}
                   className="w-full h-16 flex items-center justify-center gap-3 bg-white/20 hover:bg-white/30 backdrop-blur rounded-3xl text-white font-extrabold text-lg active:scale-95 transition-all border-2 border-white/30 shadow-lg"
@@ -321,12 +304,6 @@ export default function VolunteerScanner({ onLogout }) {
                   <ScanLine size={24} />
                   Scan Next Person
                 </button>
-                {/* Auto countdown */}
-                {countdown > 0 && (
-                  <p className="text-center text-white/60 text-sm font-medium">
-                    Auto scanning in <span className="font-extrabold text-white">{countdown}</span>s
-                  </p>
-                )}
               </div>
             </div>
           )}
