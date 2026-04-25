@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const attendeeRoutes = require('./routes/attendeeRoutes');
 
 const app = express();
@@ -17,9 +18,28 @@ mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('Connected to MongoDB Successfully.'))
   .catch(err => console.error('MongoDB connection error:', err));
 
+// Rate Limiters
+const scanLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 60,             // max 60 scan requests per minute per IP
+  message: { error: 'Too many scan requests. Please slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const otpLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10,             // max 10 OTP requests per minute per IP
+  message: { error: 'Too many OTP requests. Please wait a moment.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 // Routes
 app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/attendees/scan', scanLimiter); // Rate limit only the scan endpoint
 app.use('/api/attendees', require('./routes/attendeeRoutes'));
+app.use('/api/otp/send', otpLimiter);        // Rate limit OTP send endpoint
 app.use('/api/otp', require('./routes/otpRoutes'));
 
 // Public QR Code Scan Endpoint (When someone scans with normal phone camera)

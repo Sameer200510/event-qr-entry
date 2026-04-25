@@ -1,28 +1,99 @@
 const xlsx = require('xlsx');
 const { v4: uuidv4 } = require('uuid');
 const Attendee = require('../models/Attendee');
+const ScanLog = require('../models/ScanLog');
 const archiver = require('archiver');
 const QRCode = require('qrcode');
 
 exports.scanAttendee = async (req, res) => {
+  // Helper to log every scan attempt asynchronously (fire & forget)
+  const logScan = (data) => {
+    ScanLog.create(data).catch(err => console.error('ScanLog error:', err.message));
+  };
+
+  const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
+  const userAgent = req.headers['user-agent'] || 'unknown';
+
   try {
     const { token } = req.body;
     if (!token) return res.status(400).json({ error: 'Token is required' });
 
     const attendee = await Attendee.findOne({ token });
-    if (!attendee) return res.status(404).json({ error: 'Invalid or unknown QR token.' });
 
-    if (attendee.status === 'USED') {
-      return res.status(400).json({ error: 'Attendee has already been scanned in.', attendee });
+    // Invalid token
+    if (!attendee) {
+      logScan({ token, success: false, resultCode: 'INVALID_TOKEN', ip, userAgent });
+      return res.status(404).json({ error: 'Invalid or unknown QR token.' });
     }
 
-    attendee.status = 'USED';
-    attendee.entry_method = 'QR';
-    attendee.checkedInAt = Date.now();
-    await attendee.save();
+    // ✅ Already verified via OTP - show green success, NOT an error
+    if (attendee.status === 'USED' && attendee.entry_method === 'OTP') {
+      logScan({
+        token,
+        attendeeId: attendee._id,
+        attendeeName: attendee.name,
+        attendeeRoll: attendee.roll,
+        success: true,
+        resultCode: 'ALREADY_USED_OTP',
+        ip,
+        userAgent
+      });
+      return res.status(200).json({
+        alreadyVerified: true,
+        entry_method: 'OTP',
+        message: `${attendee.name} was already verified via OTP.`,
+        attendee: { name: attendee.name, roll: attendee.roll, checkedInAt: attendee.checkedInAt }
+      });
+    }
 
-    res.status(200).json({ message: 'Success! Attendee marked present.', attendee });
+    // ❌ Already scanned via QR - block
+    if (attendee.status === 'USED' && attendee.entry_method === 'QR') {
+      logScan({
+        token,
+        attendeeId: attendee._id,
+        attendeeName: attendee.name,
+        attendeeRoll: attendee.roll,
+        success: false,
+        resultCode: 'ALREADY_USED_QR',
+        ip,
+        userAgent
+      });
+      return res.status(400).json({
+        error: `${attendee.name} has already been scanned in via QR.`,
+        attendee: { name: attendee.name, roll: attendee.roll }
+      });
+    }
+
+    // ✅ First scan - mark as USED via QR (atomic)
+    const updated = await Attendee.findOneAndUpdate(
+      { _id: attendee._id, status: 'UNUSED' },
+      { $set: { status: 'USED', entry_method: 'QR', checkedInAt: new Date() } },
+      { new: true }
+    );
+
+    if (!updated) {
+      // Race condition - someone else scanned between our findOne and findOneAndUpdate
+      logScan({ token, success: false, resultCode: 'ALREADY_USED_QR', ip, userAgent });
+      return res.status(400).json({ error: 'Attendee was just scanned by another device.' });
+    }
+
+    logScan({
+      token,
+      attendeeId: updated._id,
+      attendeeName: updated.name,
+      attendeeRoll: updated.roll,
+      success: true,
+      resultCode: 'ALLOWED',
+      ip,
+      userAgent
+    });
+
+    res.status(200).json({
+      message: 'Entry Allowed!',
+      attendee: { name: updated.name, roll: updated.roll, checkedInAt: updated.checkedInAt }
+    });
   } catch (err) {
+    console.error('Scan error:', err);
     res.status(500).json({ error: 'Server error during verification.' });
   }
 };

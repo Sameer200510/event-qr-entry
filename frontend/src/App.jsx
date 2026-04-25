@@ -13,10 +13,13 @@ function App() {
     setRole(null);
   };
 
+  const isVolunteer = role === 'Volunteer';
+
   return (
     <Router>
       <div className="min-h-screen bg-dynamic">
-        {role && (
+        {/* Hide the main header for volunteers on mobile (they have their own compact header) */}
+        {role && !isVolunteer && (
           <header className="bg-white shadow-sm sticky top-0 z-50">
             <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
               <h1 className="font-bold text-xl text-brand-600 hidden sm:block">Event QR System</h1>
@@ -34,11 +37,12 @@ function App() {
             </div>
           </header>
         )}
+        {/* For volunteers on mobile: top-right logout button sits inside VolunteerScanner */}
         <Routes>
           <Route path="/" element={<Navigate to={role ? (role === 'Admin' ? '/admin' : '/volunteer') : '/login'} />} />
           <Route path="/login" element={!role ? <Login setRole={setRole} /> : <Navigate to="/" />} />
           <Route path="/admin" element={role === 'Admin' ? <AdminDashboard /> : <Navigate to="/" />} />
-          <Route path="/volunteer" element={role ? <VolunteerScanner /> : <Navigate to="/login" />} />
+          <Route path="/volunteer" element={role ? <VolunteerScanner onLogout={handleLogout} /> : <Navigate to="/login" />} />
         </Routes>
       </div>
     </Router>

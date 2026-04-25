@@ -57,3 +57,16 @@
 .reader-container video {
   border-radius: 1rem;
 }
+
+/* Html5Qrcode raw API - make video fill container */
+#qr-reader {
+  width: 100% !important;
+  height: 100% !important;
+  border: none !important;
+  padding: 0 !important;
+}
+#qr-reader video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
