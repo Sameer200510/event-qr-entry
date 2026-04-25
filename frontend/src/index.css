@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: #f0fdf4;
+  --color-brand-100: #dcfce7;
+  --color-brand-500: #22c55e;
+  --color-brand-600: #16a34a;
+  --color-brand-700: #15803d;
+  --color-brand-900: #14532d;
+}
+
+@layer base {
+  body {
+    @apply text-slate-900 antialiased font-sans bg-slate-50;
+    font-family: 'Outfit', sans-serif;
+  }
+}
+
+/* Dynamic Animated Background */
+.bg-dynamic {
+  background: linear-gradient(-45deg, #f0fdf4, #ccfbf1, #e0e7ff, #f3e8ff);
+  background-size: 400% 400%;
+  animation: gradientBG 15s ease infinite;
+}
+
+@keyframes gradientBG {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Premium Glassmorphism Panel */
+.glass-panel {
+  @apply bg-white/70 backdrop-blur-xl shadow-xl border border-white/50 rounded-2xl;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.glass-panel:hover {
+  @apply shadow-2xl;
+}
+
+/* Premium Inputs */
+.premium-input {
+  @apply w-full px-4 py-3 rounded-xl border border-slate-200 bg-white/50 backdrop-blur-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 focus:bg-white outline-none transition-all duration-300;
+}
+
+/* Premium Buttons */
+.premium-button {
+  @apply w-full flex items-center justify-center gap-2 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white py-3 px-4 rounded-xl font-semibold transition-all duration-300 transform active:scale-95 disabled:opacity-70 disabled:hover:scale-100 shadow-md shadow-brand-500/30;
+}
+
+/* Secondary Button */
+.secondary-button {
+  @apply w-full flex items-center justify-center gap-2 bg-white/80 hover:bg-white text-slate-700 border border-slate-200 py-3 px-4 rounded-xl font-semibold transition-all duration-300 transform active:scale-95;
+}
+
+.reader-container video {
+  border-radius: 1rem;
+}
