@@ -286,7 +286,7 @@ export default function VolunteerScanner({ onLogout }) {
               <p className="text-slate-400 font-medium">Starting camera...</p>
             </div>
           ) : (
-            <div className="flex-1 relative overflow-hidden" style={{ minHeight: '60vh' }}>
+            <div className="flex-1 relative overflow-hidden" style={{ height: 'calc(100vh - 56px)' }}>
               {/* Camera Feed */}
               <div id="qr-reader" className="absolute inset-0 bg-black" />
 

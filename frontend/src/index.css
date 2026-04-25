@@ -58,15 +58,44 @@
   border-radius: 1rem;
 }
 
-/* Html5Qrcode raw API - make video fill container */
+/* ── Html5Qrcode: suppress ALL library-injected UI ── */
 #qr-reader {
   width: 100% !important;
   height: 100% !important;
   border: none !important;
   padding: 0 !important;
+  background: black !important;
+  position: relative !important;
 }
+
+/* Hide library's own scan region box outline/image */
+#qr-reader__scan_region {
+  width: 100% !important;
+  height: 100% !important;
+  position: absolute !important;
+  top: 0 !important; left: 0 !important;
+}
+#qr-reader__scan_region > img {
+  display: none !important; /* hide white scan box image */
+}
+
+/* Make video truly fullscreen inside container */
 #qr-reader video {
   width: 100% !important;
   height: 100% !important;
   object-fit: cover !important;
+  position: absolute !important;
+  top: 0 !important; left: 0 !important;
+}
+
+/* Hide the entire dashboard (buttons, flip, torch etc) */
+#qr-reader__dashboard {
+  display: none !important;
+}
+
+/* Hide any stray anchor/text the library injects */
+#qr-reader__status_span,
+#qr-reader__header_message,
+#qr-reader a {
+  display: none !important;
 }
