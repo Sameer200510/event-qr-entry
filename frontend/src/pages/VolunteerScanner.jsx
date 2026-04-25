@@ -1,413 +1,421 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { BadgeCheck, XCircle, Loader2, Lock, Send, KeyRound, Camera, CameraOff, RefreshCw, CheckCircle2 } from 'lucide-react';
+import {
+  BadgeCheck, XCircle, Loader2, Lock, Send, KeyRound,
+  CameraOff, RefreshCw, CheckCircle2, ChevronRight, LogOut, ScanLine
+} from 'lucide-react';
 import api from '../utils/api';
 
 export default function VolunteerScanner({ onLogout }) {
-  // Core scan state
   const [scanResult, setScanResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
   const [loading, setLoading] = useState(false);
-
-  // Camera permission state: null = not asked, true = granted, false = denied
-  const [hasPermission, setHasPermission] = useState(null);
-  const [cameraStarted, setCameraStarted] = useState(false);
-
-  // OTP fallback state
+  const [hasPermission, setHasPermission] = useState(null); // null | true | false
   const [useOtp, setUseOtp] = useState(false);
   const [roll, setRoll] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState('');
+  const [scanCount, setScanCount] = useState(0); // shows scan activity
 
-  // Refs
   const html5QrRef = useRef(null);
-  const isScanningRef = useRef(false); // Prevent double-processing a scan
+  const isScanningRef = useRef(false);
   const cameraRunningRef = useRef(false);
 
-  // ─── Camera Init (only once on mount) ───────────────────────────────────────
+  // ── Camera Init ───────────────────────────────────────────────────────────
   useEffect(() => {
-    if (useOtp) {
-      stopCamera();
-      return;
-    }
-    if (hasPermission === false) return; // Already denied, don't retry
+    if (useOtp) { stopCamera(); return; }
+    if (hasPermission === false) return;
     requestPermissionAndStart();
-
-    return () => {
-      stopCamera();
-    };
-    // NOTE: 'loading' is intentionally NOT in deps - we must not reinitialize camera on each scan
-  }, [useOtp]);
+    return () => stopCamera();
+  }, [useOtp]); // 'loading' intentionally excluded to prevent camera reinit on every scan
 
   const requestPermissionAndStart = async () => {
     try {
-      // Ask permission using native browser API - only fires once
       await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
       setHasPermission(true);
       startScanner();
-    } catch (err) {
-      console.error('Camera permission denied:', err);
+    } catch {
       setHasPermission(false);
     }
   };
 
   const startScanner = () => {
-    if (cameraRunningRef.current) return; // Already running
-
+    if (cameraRunningRef.current) return;
     const scanner = new Html5Qrcode('qr-reader');
     html5QrRef.current = scanner;
-
     scanner.start(
       { facingMode: 'environment' },
-      {
-        fps: 10,
-        qrbox: { width: 240, height: 240 },
-        aspectRatio: 1.0,
-        disableFlip: false
-      },
+      { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1.0 },
       (decodedText) => {
-        if (isScanningRef.current || loading) return; // Prevent double scan
+        if (isScanningRef.current) return;
         isScanningRef.current = true;
         handleVerifyQR(decodedText);
       },
-      () => {} // Scan failure - no-op
+      () => {}
     ).then(() => {
       cameraRunningRef.current = true;
-      setCameraStarted(true);
-    }).catch(err => {
-      console.error('Scanner start error:', err);
-      setHasPermission(false);
-    });
+    }).catch(() => setHasPermission(false));
   };
 
   const stopCamera = async () => {
     if (html5QrRef.current && cameraRunningRef.current) {
-      try {
-        await html5QrRef.current.stop();
-        html5QrRef.current = null;
-        cameraRunningRef.current = false;
-        setCameraStarted(false);
-      } catch (e) {
-        // ignore
-      }
+      try { await html5QrRef.current.stop(); } catch {}
+      html5QrRef.current = null;
+      cameraRunningRef.current = false;
     }
   };
 
-  // ─── QR Verify ──────────────────────────────────────────────────────────────
+  // ── QR Verify ─────────────────────────────────────────────────────────────
   const handleVerifyQR = async (rawToken) => {
-    // Extract pure token from URL if full link scanned
     let token = rawToken;
     try {
-      if (rawToken.includes('verify/')) {
-        token = rawToken.split('verify/')[1];
-      } else if (rawToken.includes('token=')) {
-        token = new URL(rawToken).searchParams.get('token');
-      }
-    } catch (e) {}
+      if (rawToken.includes('verify/')) token = rawToken.split('verify/')[1];
+      else if (rawToken.includes('token=')) token = new URL(rawToken).searchParams.get('token');
+    } catch {}
 
     setLoading(true);
     setScanResult(null);
     setErrorMsg(null);
-
     try {
       const { data } = await api.post('/attendees/scan', { token });
-
       if (data.alreadyVerified) {
-        // OTP-verified person scanned via QR - show yellow/info card
         setScanResult({ ...data.attendee, verifiedViaOtp: true });
       } else {
         setScanResult(data.attendee);
-        playSuccessSound();
+        setScanCount(c => c + 1);
+        playTone(800, 1200, 0.2);
       }
     } catch (err) {
-      setErrorMsg(err.response?.data?.error || 'Scan failed. Invalid or expired code.');
-      playErrorSound();
+      setErrorMsg(err.response?.data?.error || 'Invalid or expired QR code.');
+      playTone(400, 250, 0.3);
     } finally {
       setLoading(false);
-      // Allow re-scanning after 3 seconds
       setTimeout(() => {
         isScanningRef.current = false;
         setScanResult(null);
         setErrorMsg(null);
-      }, 3000);
+      }, 3500);
     }
   };
 
-  // ─── OTP Handlers ───────────────────────────────────────────────────────────
+  // ── OTP ───────────────────────────────────────────────────────────────────
   const handleSendOtp = async (e) => {
     e.preventDefault();
-    if (!roll) return;
-    setLoading(true);
-    setScanResult(null);
-    setErrorMsg(null);
+    setLoading(true); setScanResult(null); setErrorMsg(null);
     try {
       await api.post('/otp/send', { roll: roll.trim() });
       setOtpSent(true);
     } catch (err) {
       setErrorMsg(err.response?.data?.error || 'Failed to send OTP.');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
-    if (!roll || !otp) return;
-    setLoading(true);
-    setScanResult(null);
-    setErrorMsg(null);
+    setLoading(true); setScanResult(null); setErrorMsg(null);
     try {
       const { data } = await api.post('/otp/verify', { roll: roll.trim(), otp: otp.trim() });
       setScanResult({ name: data.name, roll: roll.trim() });
-      playSuccessSound();
-      setRoll('');
-      setOtp('');
-      setOtpSent(false);
+      setScanCount(c => c + 1);
+      playTone(800, 1200, 0.2);
+      setRoll(''); setOtp(''); setOtpSent(false);
     } catch (err) {
       setErrorMsg(err.response?.data?.error || 'Invalid OTP.');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
-  // ─── Audio Feedback ──────────────────────────────────────────────────────────
-  const playTone = (freq1, freq2, duration) => {
+  const playTone = (f1, f2, dur) => {
     try {
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq1, audioCtx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(freq2, audioCtx.currentTime + 0.1);
-      gain.gain.setValueAtTime(0.8, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start();
-      osc.stop(audioCtx.currentTime + duration);
-    } catch (e) {}
+      osc.frequency.setValueAtTime(f1, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(f2, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.7, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + dur);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime + dur);
+    } catch {}
   };
-  const playSuccessSound = () => playTone(800, 1200, 0.2);
-  const playErrorSound = () => playTone(400, 250, 0.3);
 
-  // ─── Render ──────────────────────────────────────────────────────────────────
+  // ── Result Card ───────────────────────────────────────────────────────────
+  const ResultCard = () => {
+    if (loading && !useOtp) {
+      return (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm z-20 gap-4">
+          <div className="w-16 h-16 rounded-full border-4 border-white/20 border-t-white animate-spin" />
+          <p className="text-white font-bold text-lg tracking-wide">Verifying...</p>
+        </div>
+      );
+    }
+    if (scanResult?.verifiedViaOtp) {
+      return (
+        <div className="absolute bottom-0 inset-x-0 z-20 p-4 animate-in slide-in-from-bottom-4 duration-300">
+          <div className="bg-amber-400 rounded-3xl p-4 flex items-center gap-4 shadow-2xl">
+            <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center flex-shrink-0">
+              <CheckCircle2 size={28} className="text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-amber-900 text-xs font-bold uppercase tracking-wider">Already Verified via OTP</p>
+              <p className="text-white font-extrabold text-xl truncate">{scanResult.name}</p>
+              {scanResult.roll && <p className="text-amber-100 text-sm">#{scanResult.roll}</p>}
+            </div>
+          </div>
+        </div>
+      );
+    }
+    if (scanResult) {
+      return (
+        <div className="absolute bottom-0 inset-x-0 z-20 p-4 animate-in slide-in-from-bottom-4 duration-300">
+          <div className="bg-gradient-to-r from-emerald-500 to-green-500 rounded-3xl p-4 flex items-center gap-4 shadow-2xl shadow-green-500/40">
+            <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center flex-shrink-0">
+              <BadgeCheck size={28} className="text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-green-100 text-xs font-bold uppercase tracking-wider">✅ Entry Allowed</p>
+              <p className="text-white font-extrabold text-xl truncate">{scanResult.name}</p>
+              {scanResult.roll && <p className="text-green-100 text-sm">#{scanResult.roll}</p>}
+            </div>
+          </div>
+        </div>
+      );
+    }
+    if (errorMsg) {
+      return (
+        <div className="absolute bottom-0 inset-x-0 z-20 p-4 animate-in slide-in-from-bottom-4 duration-300">
+          <div className="bg-gradient-to-r from-red-500 to-rose-500 rounded-3xl p-4 flex items-center gap-4 shadow-2xl shadow-red-500/40">
+            <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center flex-shrink-0">
+              <XCircle size={28} className="text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-red-100 text-xs font-bold uppercase tracking-wider">❌ Entry Denied</p>
+              <p className="text-white font-bold text-sm leading-snug">{errorMsg}</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-dynamic flex flex-col">
+    <div className="min-h-screen flex flex-col bg-slate-900 overflow-hidden">
 
-      {/* Compact header for mobile */}
-      <div className="flex items-center justify-between px-4 py-3 bg-white/80 backdrop-blur-sm border-b border-slate-200 sticky top-0 z-10">
-        <h1 className="text-base font-bold text-slate-800">📋 Entry Check</h1>
+      {/* ── Top Bar ── */}
+      <div className="flex items-center justify-between px-4 py-3 bg-slate-900/90 backdrop-blur-sm border-b border-slate-700/60 sticky top-0 z-30">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-brand-500 to-emerald-500 flex items-center justify-center">
+            <ScanLine size={16} className="text-white" />
+          </div>
+          <div>
+            <p className="text-white font-bold text-sm leading-none">Entry Scanner</p>
+            {scanCount > 0 && (
+              <p className="text-emerald-400 text-xs font-medium mt-0.5">{scanCount} admitted today</p>
+            )}
+          </div>
+        </div>
+
         <div className="flex items-center gap-2">
           <button
             onClick={() => { setUseOtp(!useOtp); setScanResult(null); setErrorMsg(null); }}
-            className="text-xs px-3 py-2 rounded-full bg-slate-100 text-slate-700 font-medium active:scale-95 transition"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${
+              useOtp
+                ? 'bg-brand-500/20 text-brand-400 border border-brand-500/30'
+                : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+            }`}
           >
-            {useOtp ? '📷 QR' : '🔑 OTP'}
+            {useOtp ? <><ScanLine size={13} /> QR</> : <><Lock size={13} /> OTP</>}
           </button>
           {onLogout && (
             <button
               onClick={onLogout}
-              className="text-xs px-3 py-2 rounded-full bg-red-50 text-red-500 font-medium active:scale-95 transition border border-red-100"
+              className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition active:scale-95 border border-slate-700"
             >
-              Logout
+              <LogOut size={16} />
             </button>
           )}
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col">
+      {/* ── QR SCANNER MODE ── */}
+      {!useOtp && (
+        <div className="flex-1 flex flex-col relative">
 
-        {/* ── QR SCANNER MODE ── */}
-        {!useOtp && (
-          <div className="flex-1 flex flex-col">
-
-            {/* Permission denied state */}
-            {hasPermission === false && (
-              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center gap-4">
-                <div className="w-20 h-20 rounded-full bg-red-100 flex items-center justify-center">
-                  <CameraOff size={36} className="text-red-500" />
-                </div>
-                <h2 className="text-lg font-bold text-slate-800">Camera Access Required</h2>
-                <p className="text-slate-500 text-sm max-w-xs">
-                  Please allow camera access in your browser settings, then reload the page.
-                </p>
-                <button
-                  onClick={() => window.location.reload()}
-                  className="premium-button max-w-xs"
-                >
-                  <RefreshCw size={16} /> Retry
-                </button>
+          {/* Camera area */}
+          {hasPermission === false ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-5 p-8 bg-slate-900">
+              <div className="w-24 h-24 rounded-full bg-red-500/10 border-2 border-red-500/30 flex items-center justify-center">
+                <CameraOff size={40} className="text-red-400" />
               </div>
-            )}
-
-            {/* Permission not yet asked or loading */}
-            {hasPermission === null && (
-              <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-500">
-                <Loader2 size={40} className="animate-spin text-brand-500" />
-                <p className="text-sm font-medium">Starting camera...</p>
+              <div className="text-center">
+                <p className="text-white font-bold text-lg">Camera Blocked</p>
+                <p className="text-slate-400 text-sm mt-1 max-w-xs">Allow camera access in your browser settings, then reload.</p>
               </div>
-            )}
-
-            {/* Camera viewfinder - always mounted (DOM), shown once permission granted */}
-            <div className={`flex-1 flex flex-col ${hasPermission !== true ? 'hidden' : ''}`}>
-              {/* The actual camera feed */}
-              <div className="relative flex-1 bg-black overflow-hidden" style={{ minHeight: '55vh' }}>
-                <div id="qr-reader" className="w-full h-full" />
-
-                {/* Scan overlay frame */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="w-56 h-56 border-4 border-white/60 rounded-2xl shadow-lg">
-                    <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-brand-400 rounded-tl-xl" />
-                    <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-brand-400 rounded-tr-xl" />
-                    <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-brand-400 rounded-bl-xl" />
-                    <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-brand-400 rounded-br-xl" />
-                    {/* Scan line animation */}
-                    <div className="absolute inset-x-2 top-2 h-0.5 bg-brand-400/70 animate-bounce" style={{ animationDuration: '1.5s' }} />
-                  </div>
-                </div>
-
-                {/* Loading overlay during API call */}
-                {loading && (
-                  <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-3">
-                    <Loader2 size={48} className="animate-spin text-white" />
-                    <p className="text-white font-semibold text-lg">Verifying...</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Result card - below the camera */}
-              <div className="p-4 space-y-3">
-                {/* Already verified via OTP - yellow info card */}
-                {scanResult?.verifiedViaOtp && (
-                  <div className="bg-amber-50 p-4 rounded-2xl border-2 border-amber-400 flex items-start gap-3 animate-in slide-in-from-bottom-4 duration-300">
-                    <CheckCircle2 size={28} className="text-amber-500 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-bold text-amber-800">Already Verified via OTP</p>
-                      <p className="text-amber-700 font-semibold text-lg">{scanResult.name}</p>
-                      {scanResult.roll && <p className="text-amber-600 text-sm">🆔 {scanResult.roll}</p>}
-                    </div>
-                  </div>
-                )}
-
-                {/* Normal success */}
-                {scanResult && !scanResult.verifiedViaOtp && (
-                  <div className="bg-green-50 p-4 rounded-2xl border-2 border-green-400 flex items-start gap-3 animate-in slide-in-from-bottom-4 duration-300">
-                    <BadgeCheck size={28} className="text-green-500 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-bold text-green-700">✅ Entry Allowed!</p>
-                      <p className="text-slate-800 font-semibold text-lg">{scanResult.name}</p>
-                      {scanResult.roll && <p className="text-slate-600 text-sm">🆔 {scanResult.roll}</p>}
-                    </div>
-                  </div>
-                )}
-
-                {/* Error */}
-                {errorMsg && (
-                  <div className="bg-red-50 p-4 rounded-2xl border-2 border-red-400 flex items-start gap-3 animate-in slide-in-from-bottom-4 duration-300">
-                    <XCircle size={28} className="text-red-500 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-bold text-red-700">Entry Denied</p>
-                      <p className="text-slate-800 text-sm">{errorMsg}</p>
-                    </div>
-                  </div>
-                )}
-
-                {!scanResult && !errorMsg && !loading && (
-                  <p className="text-center text-slate-400 text-sm py-2">Point the camera at a QR code</p>
-                )}
-              </div>
+              <button
+                onClick={() => window.location.reload()}
+                className="flex items-center gap-2 bg-brand-500 text-white px-6 py-3 rounded-2xl font-bold active:scale-95 transition"
+              >
+                <RefreshCw size={16} /> Retry
+              </button>
             </div>
-          </div>
-        )}
+          ) : hasPermission === null ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-4 bg-slate-900">
+              <div className="w-16 h-16 rounded-full border-4 border-slate-700 border-t-brand-500 animate-spin" />
+              <p className="text-slate-400 font-medium">Starting camera...</p>
+            </div>
+          ) : (
+            <div className="flex-1 relative overflow-hidden" style={{ minHeight: '60vh' }}>
+              {/* Camera Feed */}
+              <div id="qr-reader" className="absolute inset-0 bg-black" />
 
-        {/* ── OTP FALLBACK MODE ── */}
-        {useOtp && (
-          <div className="flex-1 p-4 space-y-4 max-w-md mx-auto w-full">
-            <div className="glass-panel p-5 space-y-4">
-              <div className="flex items-center gap-2 text-slate-700 border-b border-slate-100 pb-3">
-                <Lock size={20} />
-                <h2 className="font-bold text-base">OTP Verification</h2>
+              {/* Overlay: dark vignette edges */}
+              <div className="absolute inset-0 pointer-events-none"
+                style={{
+                  background: 'radial-gradient(ellipse at center, transparent 38%, rgba(0,0,0,0.75) 100%)'
+                }}
+              />
+
+              {/* Scan Frame */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <div className="relative w-56 h-56">
+                  {/* Corners */}
+                  {[['top-0 left-0', 'border-t-4 border-l-4', 'rounded-tl-2xl'],
+                    ['top-0 right-0', 'border-t-4 border-r-4', 'rounded-tr-2xl'],
+                    ['bottom-0 left-0', 'border-b-4 border-l-4', 'rounded-bl-2xl'],
+                    ['bottom-0 right-0', 'border-b-4 border-r-4', 'rounded-br-2xl']
+                  ].map(([pos, border, radius], i) => (
+                    <div key={i} className={`absolute ${pos} w-8 h-8 ${border} ${radius} border-brand-400`} />
+                  ))}
+                  {/* Scanning line */}
+                  <div className="absolute inset-x-3 top-3 h-0.5 bg-gradient-to-r from-transparent via-brand-400 to-transparent animate-bounce" style={{ animationDuration: '1.8s' }} />
+                </div>
+                <p className="text-white/60 text-sm font-medium mt-6 tracking-wide">Align QR code within frame</p>
               </div>
 
-              {!otpSent ? (
-                <form onSubmit={handleSendOtp} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Roll Number</label>
-                    <input
-                      type="text"
-                      required
-                      className="premium-input text-base"
-                      placeholder="Enter attendee's roll number"
-                      value={roll}
-                      onChange={e => setRoll(e.target.value)}
-                      disabled={loading}
-                      autoComplete="off"
-                    />
-                  </div>
-                  <button type="submit" disabled={loading} className="premium-button h-14 text-base">
-                    {loading ? <Loader2 className="animate-spin w-5 h-5" /> : <Send size={18} />}
-                    {loading ? 'Sending...' : 'Send OTP'}
-                  </button>
-                </form>
-              ) : (
-                <form onSubmit={handleVerifyOtp} className="space-y-4">
-                  <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-sm text-green-700">
-                    OTP was sent to the registered email for <strong>{roll}</strong>.
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Enter 6-Digit OTP</label>
-                    <input
-                      type="number"
-                      required
-                      maxLength={6}
-                      autoFocus
-                      inputMode="numeric"
-                      pattern="[0-9]{6}"
-                      className="premium-input text-center text-3xl tracking-widest font-mono font-bold h-16"
-                      placeholder="000000"
-                      value={otp}
-                      onChange={e => setOtp(e.target.value.slice(0, 6))}
-                      disabled={loading}
-                    />
-                  </div>
-                  <button type="submit" disabled={loading} className="premium-button h-14 text-base">
-                    {loading ? <Loader2 className="animate-spin w-5 h-5" /> : <KeyRound size={18} />}
-                    {loading ? 'Verifying...' : 'Verify & Admit'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setOtpSent(false); setOtp(''); }}
-                    className="w-full text-slate-500 hover:text-slate-700 text-sm py-2 transition"
-                  >
-                    ← Change Roll Number / Resend
-                  </button>
-                </form>
-              )}
+              {/* Loading + Result overlays */}
+              <ResultCard />
             </div>
+          )}
+        </div>
+      )}
 
-            {/* OTP Result cards */}
-            {scanResult && (
-              <div className="bg-green-50 p-4 rounded-2xl border-2 border-green-400 flex items-start gap-3 animate-in slide-in-from-bottom-4 duration-300">
-                <BadgeCheck size={28} className="text-green-500 flex-shrink-0 mt-0.5" />
+      {/* ── OTP MODE ── */}
+      {useOtp && (
+        <div className="flex-1 flex flex-col bg-slate-900">
+          <div className="flex-1 flex flex-col justify-center p-5 max-w-md mx-auto w-full gap-4">
+
+            {/* Card */}
+            <div className="bg-slate-800 rounded-3xl border border-slate-700/60 overflow-hidden shadow-2xl">
+              {/* Card Header */}
+              <div className="bg-gradient-to-r from-slate-700 to-slate-800 px-5 py-4 flex items-center gap-3 border-b border-slate-700/60">
+                <div className="w-9 h-9 rounded-xl bg-brand-500/20 flex items-center justify-center">
+                  <Lock size={18} className="text-brand-400" />
+                </div>
                 <div>
-                  <p className="font-bold text-green-700">✅ Entry Allowed!</p>
-                  <p className="text-slate-800 font-semibold text-lg">{scanResult.name}</p>
-                  {scanResult.roll && <p className="text-slate-600 text-sm">🆔 {scanResult.roll}</p>}
+                  <p className="text-white font-bold text-sm">OTP Verification</p>
+                  <p className="text-slate-400 text-xs">Manual entry fallback</p>
+                </div>
+              </div>
+
+              <div className="p-5 space-y-4">
+                {!otpSent ? (
+                  <form onSubmit={handleSendOtp} className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Roll Number</label>
+                      <input
+                        type="text"
+                        required
+                        autoComplete="off"
+                        className="w-full px-4 py-4 rounded-2xl bg-slate-900 border border-slate-600 text-white placeholder:text-slate-600 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 outline-none transition-all text-base font-medium"
+                        placeholder="Enter attendee's roll no."
+                        value={roll}
+                        onChange={e => setRoll(e.target.value)}
+                        disabled={loading}
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="w-full h-14 flex items-center justify-center gap-2.5 bg-gradient-to-r from-brand-500 to-emerald-500 text-white font-bold text-base rounded-2xl active:scale-95 transition-all disabled:opacity-60 shadow-lg shadow-brand-500/30"
+                    >
+                      {loading
+                        ? <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Sending...</>
+                        : <><Send size={18} /> Send OTP to Email</>
+                      }
+                    </button>
+                  </form>
+                ) : (
+                  <form onSubmit={handleVerifyOtp} className="space-y-4">
+                    <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl px-4 py-3 flex items-center gap-2">
+                      <CheckCircle2 size={16} className="text-emerald-400 flex-shrink-0" />
+                      <p className="text-emerald-300 text-sm font-medium">OTP sent to email for <span className="font-bold text-white">{roll}</span></p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">6-Digit OTP</label>
+                      <input
+                        type="number"
+                        required
+                        autoFocus
+                        inputMode="numeric"
+                        maxLength={6}
+                        className="w-full px-4 py-4 rounded-2xl bg-slate-900 border border-slate-600 text-white text-center text-3xl tracking-[0.4em] font-mono font-black placeholder:text-slate-700 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 outline-none transition-all"
+                        placeholder="000000"
+                        value={otp}
+                        onChange={e => setOtp(e.target.value.slice(0, 6))}
+                        disabled={loading}
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="w-full h-14 flex items-center justify-center gap-2.5 bg-gradient-to-r from-brand-500 to-emerald-500 text-white font-bold text-base rounded-2xl active:scale-95 transition-all disabled:opacity-60 shadow-lg shadow-brand-500/30"
+                    >
+                      {loading
+                        ? <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Verifying...</>
+                        : <><KeyRound size={18} /> Verify & Admit</>
+                      }
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setOtpSent(false); setOtp(''); }}
+                      className="w-full text-slate-500 hover:text-slate-300 text-sm py-2 transition flex items-center justify-center gap-1"
+                    >
+                      <ChevronRight size={14} className="rotate-180" /> Back / Change Roll
+                    </button>
+                  </form>
+                )}
+              </div>
+            </div>
+
+            {/* OTP Result Cards */}
+            {scanResult && (
+              <div className="bg-gradient-to-r from-emerald-500 to-green-500 rounded-3xl p-4 flex items-center gap-4 shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
+                <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center flex-shrink-0">
+                  <BadgeCheck size={28} className="text-white" />
+                </div>
+                <div>
+                  <p className="text-green-100 text-xs font-bold uppercase tracking-wider">✅ Entry Allowed</p>
+                  <p className="text-white font-extrabold text-xl">{scanResult.name}</p>
+                  {scanResult.roll && <p className="text-green-100 text-sm">#{scanResult.roll}</p>}
                 </div>
               </div>
             )}
             {errorMsg && (
-              <div className="bg-red-50 p-4 rounded-2xl border-2 border-red-400 flex items-start gap-3 animate-in slide-in-from-bottom-4 duration-300">
-                <XCircle size={28} className="text-red-500 flex-shrink-0 mt-0.5" />
+              <div className="bg-gradient-to-r from-red-500 to-rose-500 rounded-3xl p-4 flex items-center gap-4 shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
+                <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center flex-shrink-0">
+                  <XCircle size={28} className="text-white" />
+                </div>
                 <div>
-                  <p className="font-bold text-red-700">Failed</p>
-                  <p className="text-slate-700 text-sm">{errorMsg}</p>
+                  <p className="text-red-100 text-xs font-bold uppercase">❌ Failed</p>
+                  <p className="text-white font-bold text-sm">{errorMsg}</p>
                 </div>
               </div>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
