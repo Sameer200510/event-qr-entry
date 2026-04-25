@@ -21,26 +21,50 @@ export default function VolunteerScanner({ onLogout }) {
   const isScanningRef = useRef(false);
   const cameraRunningRef = useRef(false);
 
-  // ── Camera Init ───────────────────────────────────────────────────────────
+  // Effect 1: manage camera lifecycle based on OTP toggle
   useEffect(() => {
-    if (useOtp) { stopCamera(); return; }
-    if (hasPermission === false) return;
-    requestPermissionAndStart();
+    if (useOtp) {
+      stopCamera();
+      return;
+    }
+    // Ask permission (only once - if already granted, this just fast-resolves)
+    if (hasPermission === null) {
+      requestPermission();
+    }
     return () => stopCamera();
-  }, [useOtp]); // 'loading' intentionally excluded to prevent camera reinit on every scan
+  }, [useOtp]);
 
-  const requestPermissionAndStart = async () => {
+  // Effect 2: start scanner AFTER React has rendered the #qr-reader div
+  // Triggered only when hasPermission flips to true
+  useEffect(() => {
+    if (hasPermission === true && !useOtp) {
+      // Small timeout ensures the div is fully painted in DOM
+      const timer = setTimeout(() => startScanner(), 100);
+      return () => clearTimeout(timer);
+    }
+  }, [hasPermission]);
+
+  const requestPermission = async () => {
     try {
       await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-      setHasPermission(true);
-      startScanner();
+      setHasPermission(true); // triggers Effect 2 → startScanner after re-render
     } catch {
       setHasPermission(false);
     }
   };
 
+  const stopCamera = async () => {
+    if (html5QrRef.current && cameraRunningRef.current) {
+      try { await html5QrRef.current.stop(); } catch {}
+      html5QrRef.current = null;
+      cameraRunningRef.current = false;
+    }
+  };
+
   const startScanner = () => {
     if (cameraRunningRef.current) return;
+    const el = document.getElementById('qr-reader');
+    if (!el) { console.error('#qr-reader div not in DOM yet'); return; }
     const scanner = new Html5Qrcode('qr-reader');
     html5QrRef.current = scanner;
     scanner.start(
@@ -54,16 +78,12 @@ export default function VolunteerScanner({ onLogout }) {
       () => {}
     ).then(() => {
       cameraRunningRef.current = true;
-    }).catch(() => setHasPermission(false));
+    }).catch((err) => {
+      console.error('Scanner start failed:', err);
+      setHasPermission(false);
+    });
   };
 
-  const stopCamera = async () => {
-    if (html5QrRef.current && cameraRunningRef.current) {
-      try { await html5QrRef.current.stop(); } catch {}
-      html5QrRef.current = null;
-      cameraRunningRef.current = false;
-    }
-  };
 
   // ── QR Verify ─────────────────────────────────────────────────────────────
   const handleVerifyQR = async (rawToken) => {
