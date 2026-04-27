@@ -3,11 +3,10 @@ const nodemailer = require('nodemailer');
 
 // Setup generic transport based on .env
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: process.env.SMTP_PORT || 587,
+  service: 'gmail',
   auth: {
-    user: process.env.SMTP_USER || 'dummy@example.com',
-    pass: process.env.SMTP_PASS || 'password'
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS
   }
 });
 
