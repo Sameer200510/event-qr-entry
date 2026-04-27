@@ -58,18 +58,34 @@ exports.sendOtp = async (req, res) => {
 
     // Send email (we don't await blocking it if possible, but simpler to await for UI loading state)
     // In dev, if dummy is set, it will fail if not using Ethereal, so we catch error but don't crash
+    // Send email
     if (!process.env.SMTP_USER) {
       console.log(`[NO_SMTP_ENV] OTP for ${attendee.email || roll} is: ${code}`);
-    } else if (attendee.email) {
+      return res.status(200).json({ 
+        message: 'OTP generated (Console Only)', 
+        debug: 'SMTP_USER is not set in .env' 
+      });
+    } 
+
+    if (!attendee.email) {
+      return res.status(400).json({ error: 'Attendee has no email address registered.' });
+    }
+
+    try {
       await transporter.sendMail({
-        from: '"Event Team" <no-reply@event.com>',
+        from: `"Event Team" <${process.env.SMTP_USER}>`,
         to: attendee.email,
         subject: 'Your Event Entry OTP',
         text: `Your One-Time Password for event entry is: ${code}. It expires in 2 minutes.`
-      }).catch(err => console.error("Email send warning: ", err.message));
+      });
+      res.status(200).json({ message: 'OTP sent to your email.' });
+    } catch (mailErr) {
+      console.error("Email send error:", mailErr);
+      return res.status(500).json({ 
+        error: 'Failed to send email. Please check server logs or SMTP config.',
+        details: mailErr.message 
+      });
     }
-
-    res.status(200).json({ message: 'OTP sent' });
 
   } catch (err) {
     console.error(err);
