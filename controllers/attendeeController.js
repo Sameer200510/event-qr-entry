@@ -285,6 +285,9 @@ exports.sendManualEmail = async (req, res) => {
     const qrCodeDataUrl = await QRCode.toDataURL(attendee.qrLink);
     await sendQrEmail(attendee, qrCodeDataUrl, message);
 
+    attendee.emailSent = true;
+    await attendee.save();
+
     res.status(200).json({ message: `QR Code sent to ${attendee.email}` });
   } catch (error) {
     console.error('Error sending manual email:', error);
@@ -308,6 +311,8 @@ exports.sendBulkEmails = async (req, res) => {
       try {
         const qrCodeDataUrl = await QRCode.toDataURL(attendee.qrLink);
         await sendQrEmail(attendee, qrCodeDataUrl, message);
+        attendee.emailSent = true;
+        await attendee.save();
       } catch (err) {
         console.error(`Bulk email failed for ${attendee.roll}:`, err.message);
       }

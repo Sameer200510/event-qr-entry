@@ -34,6 +34,10 @@ const AttendeeSchema = new mongoose.Schema({
   checkedInAt: {
     type: Date
   },
+  emailSent: {
+    type: Boolean,
+    default: false
+  },
   otp: {
     code: String,
     expiry: Date,

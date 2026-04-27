@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Upload, FileSpreadsheet, Download, Settings, Loader2, Mail, CheckCircle2, User, Users, Send, MessageSquare } from 'lucide-react';
+import { Upload, FileSpreadsheet, Download, Settings, Loader2, Mail, CheckCircle2, User, Users, Send, MessageSquare, Clock, Check, AlertCircle } from 'lucide-react';
 import api from '../utils/api';
 
 export default function AdminDashboard() {
@@ -95,7 +95,7 @@ export default function AdminDashboard() {
     setEmailLoading(id);
     try {
       await api.post(`/attendees/send-email/${id}`, { message: customMessage });
-      alert('Email sent successfully!');
+      fetchAttendees(); // Refresh to show "Sent" status
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to send email');
     } finally {
@@ -104,11 +104,12 @@ export default function AdminDashboard() {
   };
 
   const handleSendBulkEmails = async () => {
-    if (!confirm('Are you sure you want to send QR emails to ALL registered attendees? This may take a few minutes.')) return;
+    if (!confirm(`Are you sure you want to send QR emails to ${attendees.filter(a => !a.emailSent).length} pending attendees?`)) return;
     setBulkLoading(true);
     try {
       const { data } = await api.post('/attendees/send-bulk', { message: customMessage });
       alert(data.message);
+      fetchAttendees();
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to start bulk email process');
     } finally {
@@ -222,14 +223,14 @@ export default function AdminDashboard() {
               </div>
               <div>
                 <h3 className="text-2xl font-bold text-slate-800">Success!</h3>
-                <p className="text-slate-500 mt-2">QR codes have been generated. You can now send them manually from the attendee list below.</p>
+                <p className="text-slate-500 mt-2">QR codes have been generated. You can now send them manually from the list below.</p>
               </div>
               <div className="flex flex-col sm:flex-row gap-3 justify-center mt-6">
                 <button onClick={resetState} className="secondary-button">Upload Another</button>
                 <button onClick={() => {
                   const element = document.getElementById('attendee-list');
                   element?.scrollIntoView({ behavior: 'smooth' });
-                }} className="premium-button">View Attendees</button>
+                }} className="premium-button">View Attendee List</button>
               </div>
             </div>
           )}
@@ -262,18 +263,18 @@ export default function AdminDashboard() {
               <Users size={24} />
             </div>
             <div>
-              <h3 className="text-xl font-bold text-slate-800">Registered Attendees</h3>
+              <h3 className="text-xl font-bold text-slate-800">Attendee List & QR Distribution</h3>
               <p className="text-sm text-slate-500">{attendees.length} total entries</p>
             </div>
           </div>
           <div className="flex gap-3">
             <button 
               onClick={handleSendBulkEmails} 
-              disabled={bulkLoading || attendees.length === 0}
-              className="premium-button bg-brand-600 hover:bg-brand-700 text-sm py-2 px-4 flex items-center gap-2"
+              disabled={bulkLoading || attendees.filter(a => !a.emailSent).length === 0}
+              className="premium-button bg-brand-600 hover:bg-brand-700 text-sm py-2 px-4 flex items-center gap-2 shadow-md transition-all active:scale-95"
             >
               {bulkLoading ? <Loader2 className="animate-spin w-4 h-4" /> : <Send size={16} />}
-              Send All QR Emails
+              Send Pending QR Emails
             </button>
             <button onClick={fetchAttendees} className="secondary-button text-sm py-2 px-4">
               Refresh
@@ -281,53 +282,72 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="overflow-x-auto rounded-xl border border-slate-100">
+        <div className="overflow-x-auto rounded-xl border border-slate-100 shadow-sm">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 text-slate-600 text-sm font-semibold">
                 <th className="p-4 border-b">Name</th>
                 <th className="p-4 border-b">Roll Number</th>
-                <th className="p-4 border-b">Email</th>
-                <th className="p-4 border-b">Status</th>
-                <th className="p-4 border-b text-right">Actions</th>
+                <th className="p-4 border-b text-center">Email Status</th>
+                <th className="p-4 border-b text-center">Entry Status</th>
+                <th className="p-4 border-b text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {attendees.length === 0 ? (
                 <tr>
                   <td colSpan="5" className="p-12 text-center text-slate-400 italic">
-                    No attendees registered yet.
+                    No attendees registered yet. Upload an Excel file to get started.
                   </td>
                 </tr>
               ) : (
                 attendees.map(a => (
                   <tr key={a._id} className="hover:bg-slate-50 transition-colors group">
-                    <td className="p-4 font-medium text-slate-800">{a.name}</td>
-                    <td className="p-4 text-slate-600">{a.roll}</td>
-                    <td className="p-4 text-slate-600">{a.email || '-'}</td>
                     <td className="p-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                        a.status === 'USED' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                      <p className="font-semibold text-slate-800">{a.name}</p>
+                      <p className="text-xs text-slate-400">{a.email || 'No Email'}</p>
+                    </td>
+                    <td className="p-4 text-slate-600 font-medium">{a.roll}</td>
+                    <td className="p-4 text-center">
+                      {a.emailSent ? (
+                        <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 px-3 py-1 rounded-full text-xs font-bold border border-green-100">
+                          <Check size={12} /> Sent
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 px-3 py-1 rounded-full text-xs font-bold border border-amber-100">
+                          <Clock size={12} /> Pending
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-4 text-center">
+                      <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold border ${
+                        a.status === 'USED' 
+                          ? 'bg-blue-50 text-blue-700 border-blue-100' 
+                          : 'bg-slate-50 text-slate-500 border-slate-100'
                       }`}>
-                        {a.status}
+                        {a.status === 'USED' ? 'Checked In' : 'Not Entered'}
                       </span>
                     </td>
                     <td className="p-4 text-right">
                       <button
                         onClick={() => handleSendManualEmail(a._id)}
                         disabled={!a.email || emailLoading === a._id}
-                        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm ${
                           !a.email 
-                            ? 'text-slate-300 cursor-not-allowed' 
-                            : 'text-brand-600 bg-brand-50 hover:bg-brand-600 hover:text-white'
+                            ? 'text-slate-300 cursor-not-allowed bg-slate-50' 
+                            : a.emailSent
+                              ? 'text-brand-600 bg-white border border-brand-200 hover:bg-brand-50'
+                              : 'text-white bg-brand-600 hover:bg-brand-700'
                         }`}
                       >
                         {emailLoading === a._id ? (
                           <Loader2 className="animate-spin w-4 h-4" />
+                        ) : a.emailSent ? (
+                          <Send size={16} />
                         ) : (
                           <Mail size={16} />
                         )}
-                        <span>Send QR</span>
+                        <span>{a.emailSent ? 'Resend' : 'Send QR'}</span>
                       </button>
                     </td>
                   </tr>
