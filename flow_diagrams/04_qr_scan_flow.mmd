@@ -1,0 +1,34 @@
+flowchart TD
+    V(["Volunteer Opens Scanner\njsQR camera feed"])
+    --> Scan["Camera detects QR Code\nDecodes token from image"]
+    --> ScanReq["POST /api/attendees/scan\ntoken + JWT Header"]
+
+    ScanReq --> ScanRL{"Rate Limiter\nless than 60 req/min?"}
+    ScanRL -- "Over limit" --> RL429["429 Too Many Requests"]
+    ScanRL -- "OK" --> AuthMW{"JWT Valid?"}
+    AuthMW -- "No" --> Err401["401 Unauthorized"]
+    AuthMW -- "Yes" --> RoleCheck{"Role = Admin\nor Volunteer?"}
+    RoleCheck -- "No" --> Err403["403 Forbidden"]
+    RoleCheck -- "Yes" --> FindToken["Attendee.findOne\ntoken"]
+
+    FindToken --> Exists{"Attendee\nfound?"}
+    Exists -- "No" --> LogInvalid["ScanLog: INVALID_TOKEN"]
+    --> Err404["404 Invalid QR Token"]
+
+    Exists -- "Yes" --> CheckStatus{"Status = USED?\nentry_method?"}
+
+    CheckStatus -- "USED via OTP" --> LogOTP["ScanLog: ALREADY_USED_OTP\nsuccess: true"]
+    --> OTPSuccess["200: Already verified via OTP\nShown as GREEN on UI"]
+
+    CheckStatus -- "USED via QR" --> LogQRDup["ScanLog: ALREADY_USED_QR\nsuccess: false"]
+    --> QRErr["400: Already scanned via QR"]
+
+    CheckStatus -- "UNUSED" --> AtomicUpdate["Attendee.findOneAndUpdate\nstatus UNUSED\nset status USED, entry_method QR\ncheckedInAt now"]
+
+    AtomicUpdate --> Updated{"Update\nsucceeded?"}
+    Updated -- "Race Condition" --> LogRace["ScanLog: ALREADY_USED_QR"]
+    --> RaceErr["400: Scanned by another device"]
+
+    Updated -- "Yes" --> LogSuccess["ScanLog: ALLOWED\nsuccess: true"]
+    --> AllowEntry["200: Entry Allowed!\nname, roll, checkedInAt"]
+    --> GreenUI["Volunteer sees\nGREEN Screen on Phone"]

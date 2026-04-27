@@ -1,0 +1,14 @@
+flowchart TD
+    P(["Attendee scans QR\nwith phone camera"])
+    --> Browser["Browser opens\nGET /verify/token"]
+
+    Browser --> FindToken["Attendee.findOneAndUpdate\ntoken and status UNUSED\nset status USED, entry_method QR\natomic operation"]
+
+    FindToken --> Updated{"Updated?"}
+
+    Updated -- "No update" --> CheckExists["Attendee.findOne token"]
+    CheckExists --> TokenExists{"Token\nexists?"}
+    TokenExists -- "No" --> HTML404["HTML Response\nInvalid QR Code\nThis token does not exist"]
+    TokenExists -- "Yes already used" --> HTML400["HTML Response\nAlready Scanned\nName and Roll shown"]
+
+    Updated -- "Yes" --> HTML200["HTML Response\nEntry Allowed\nName + Roll + Checked in securely"]

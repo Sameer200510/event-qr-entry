@@ -1,0 +1,22 @@
+flowchart LR
+    Start(["Attendee arrives at gate"])
+    --> HasQR{"Has QR code\non phone or print?"}
+
+    HasQR -- "Yes - Volunteer scans" --> VolScan["Volunteer scans\nwith phone camera\njsQR"]
+    HasQR -- "Yes - Self scan" --> SelfScan["Attendee opens\ncamera app\nscans own QR"]
+    HasQR -- "No QR" --> OTPPath["Volunteer enters\nRoll Number\nOTP via Email"]
+
+    VolScan --> QRResult{"QR Scan\nResult"}
+    SelfScan --> PublicResult{"Public Endpoint\nResult"}
+    OTPPath --> OTPResult{"OTP\nVerified?"}
+
+    QRResult -- "ALLOWED" --> EntryGranted(["Entry Granted"])
+    QRResult -- "ALREADY_USED_OTP" --> EntryGranted
+    QRResult -- "ALREADY_USED_QR" --> EntryDenied(["Entry Denied"])
+    QRResult -- "INVALID_TOKEN" --> EntryDenied
+
+    PublicResult -- "Updated successfully" --> EntryGranted
+    PublicResult -- "Already used or Invalid" --> EntryDenied
+
+    OTPResult -- "Yes" --> EntryGranted
+    OTPResult -- "No" --> EntryDenied

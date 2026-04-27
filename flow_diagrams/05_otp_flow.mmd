@@ -1,0 +1,43 @@
+flowchart TD
+    V(["Volunteer or Admin\nManual Entry"])
+    --> EnterRoll["Enter Roll Number\nPOST /api/otp/send\nroll + JWT"]
+
+    EnterRoll --> OTPRateLimit{"OTP Rate Limiter\nless than 10 req/min?"}
+    OTPRateLimit -- "Over limit" --> RL429["429 Too Many Requests"]
+    OTPRateLimit -- "OK" --> FindAttendee["Attendee.findOne roll"]
+
+    FindAttendee --> Found{"Found?"}
+    Found -- "No" --> Err404["404 Attendee not found"]
+    Found -- "Yes" --> AlreadyUsed{"Status = USED?"}
+    AlreadyUsed -- "Yes" --> Err400Used["400 Already checked in"]
+
+    AlreadyUsed -- "No" --> Check30s{"Last OTP sent\nless than 30 seconds ago?"}
+    Check30s -- "Yes" --> Err429Cooldown["429 Wait 30 seconds"]
+
+    Check30s -- "No" --> CheckAttempts{"OTP attempts\n3 or more?"}
+    CheckAttempts -- "Yes" --> Err403Max["403 Max attempts exceeded"]
+
+    CheckAttempts -- "No" --> GenOTP["Generate 6-digit OTP\nExpiry: now + 2 minutes\nIncrement attempts"]
+    --> SaveOTP["attendee.save\ncode, expiry, attempts, lastSentTime"]
+    --> SendEmail{"SMTP configured\nand email exists?"}
+
+    SendEmail -- "Yes" --> Email["nodemailer.sendMail\nSubject: Your Event Entry OTP"]
+    SendEmail -- "No" --> Console["console.log OTP\nDev mode"]
+
+    Email --> OTPSent["200: OTP Sent"]
+    Console --> OTPSent
+
+    OTPSent --> EnterOTP["Volunteer enters OTP\nPOST /api/otp/verify\nroll, otp + JWT"]
+
+    EnterOTP --> FindAgain["Attendee.findOne roll"]
+    --> ValidateOTP{"OTP Checks"}
+
+    ValidateOTP -- "Expired\nnow > expiry" --> ErrExpired["400: OTP Expired"]
+    ValidateOTP -- "Wrong code" --> IncrAttempt["Increment attempts\nsave"]
+    --> ErrWrong["400: Invalid OTP"]
+
+    ValidateOTP -- "Correct" --> AtomicOTP["Attendee.findOneAndUpdate\nstatus UNUSED\nset status USED, entry_method OTP\nunset otp"]
+
+    AtomicOTP --> OTPUpdated{"Update\nsucceeded?"}
+    OTPUpdated -- "Race Condition" --> ErrRace["400: Already checked in"]
+    OTPUpdated -- "Yes" --> OTPAllowed["200: ALLOWED with name"]

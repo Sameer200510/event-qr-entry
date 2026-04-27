@@ -1,0 +1,18 @@
+{
+  "theme": "default",
+  "themeVariables": {
+    "fontSize": "16px",
+    "primaryColor": "#4f46e5",
+    "primaryTextColor": "#1f2937",
+    "primaryBorderColor": "#6366f1",
+    "lineColor": "#6366f1",
+    "secondaryColor": "#e0e7ff",
+    "tertiaryColor": "#f0fdf4",
+    "background": "#ffffff",
+    "mainBkg": "#ffffff",
+    "nodeBorder": "#4f46e5",
+    "clusterBkg": "#ede9fe",
+    "titleColor": "#1f2937",
+    "edgeLabelBackground": "#f3f4f6"
+  }
+}

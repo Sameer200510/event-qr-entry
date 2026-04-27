@@ -1,0 +1,34 @@
+flowchart TD
+    A(["Admin Logged In"])
+    --> Upload["Upload Excel File\nPOST /api/attendees/upload-excel\nJWT Token + Field Mapping"]
+
+    Upload --> AuthMW{"JWT Valid?"}
+    AuthMW -- "Invalid" --> Err401["401 Unauthorized"]
+    AuthMW -- "Valid" --> RoleCheck{"Role = Admin?"}
+    RoleCheck -- "No" --> Err403["403 Forbidden"]
+    RoleCheck -- "Yes" --> Multer["multer parses file\nmemory storage"]
+
+    Multer --> ParseExcel["xlsx.read buffer\nExtract rows from Sheet1"]
+    --> ValidateMapping["Validate Field Mapping\nname + roll required"]
+    --> LoopRows["Loop through each row"]
+
+    LoopRows --> CheckEmpty{"name or roll\nempty?"}
+    CheckEmpty -- "Yes" --> MarkError["Mark: Error - Missing fields"]
+    CheckEmpty -- "No" --> CollectRolls["Collect all valid rolls"]
+
+    CollectRolls --> BulkCheck["Attendee.find\nAll existing rolls in DB\none query"]
+
+    BulkCheck --> ForEachRow["For each valid row"]
+    ForEachRow --> InDB{"Roll exists\nin DB?"}
+    InDB -- "Yes" --> SkipDB["Mark: Skipped - Duplicate in DB"]
+    InDB -- "No" --> InFile{"Roll seen in\nthis file already?"}
+    InFile -- "Yes" --> SkipFile["Mark: Skipped - Duplicate in File"]
+    InFile -- "No" --> GenToken["Generate UUID token\nBuild QR Link: /verify/token"]
+
+    GenToken --> SaveAttendee["Add to newAttendees array\nname, roll, email, token, qrLink"]
+    SaveAttendee --> MarkAdded["Mark: Added"]
+
+    MarkAdded --> BulkInsert["Attendee.insertMany\nordered: false"]
+    --> GenQRImages["QRCode.toBuffer\nfor each new attendee\nPNG 300x300"]
+    --> BuildZIP["archiver creates ZIP\nprocessed_attendees.xlsx\nqrs/roll.png per attendee"]
+    --> SendZIP["ZIP sent as download"]

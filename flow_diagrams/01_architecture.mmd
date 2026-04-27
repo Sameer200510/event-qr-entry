@@ -1,0 +1,33 @@
+graph TB
+    subgraph CLIENTS["👥 Clients"]
+        A["🖥️ Admin\nReact Frontend"]
+        V["📱 Volunteer\nMobile Browser"]
+        P["📷 Public Attendee\nPhone Camera"]
+    end
+
+    subgraph SERVER["⚙️ Express.js Backend"]
+        MW["🔧 Middleware\nCORS · JSON Parser"]
+        RL1["🛡️ Scan Rate Limiter\n60 req/min per IP"]
+        RL2["🛡️ OTP Rate Limiter\n10 req/min per IP"]
+        
+        subgraph ROUTES["📡 Routes"]
+            R1["/api/auth"]
+            R2["/api/attendees"]
+            R3["/api/otp"]
+            R4["/verify/:token\nPublic Endpoint"]
+        end
+    end
+
+    subgraph DB["🍃 MongoDB"]
+        M1["👤 User\nAdmin/Volunteer accounts"]
+        M2["🎫 Attendee\nname · roll · token · status · OTP"]
+        M3["📋 ScanLog\nAudit Trail"]
+    end
+
+    A --> MW
+    V --> MW
+    P --> R4
+    MW --> RL1
+    MW --> RL2
+    MW --> ROUTES
+    ROUTES --> DB

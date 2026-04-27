@@ -1,0 +1,17 @@
+flowchart TD
+    Start(["🔐 User Opens App"])
+    --> Login["POST /api/auth/login\n{username, password}"]
+    --> FindUser{"User exists\nin MongoDB?"}
+
+    FindUser -- "No" --> Err401["401 Invalid Credentials"]
+    FindUser -- "Yes" --> CheckPass{"bcrypt.compare\npassword?"}
+
+    CheckPass -- "Wrong" --> Err401
+    CheckPass -- "Match" --> SignJWT["Sign JWT Token\n30 days expiry\nwith id and role"]
+    --> Return["200: {token, role, username}"]
+
+    Return --> Store["Store JWT in\nlocalStorage / state"]
+    --> UseApp["Access App by Role"]
+
+    UseApp --> AdminView["Admin View\nUpload Excel, Monitor"]
+    UseApp --> VolView["Volunteer View\nQR Scanner"]
