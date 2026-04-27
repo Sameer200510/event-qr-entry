@@ -12,5 +12,8 @@ const upload = multer({ storage: multer.memoryStorage() });
 router.post('/parse-excel', protect, authorize('Admin'), upload.single('file'), attendeeController.parseExcel);
 router.post('/upload-excel', protect, authorize('Admin'), upload.single('file'), attendeeController.uploadExcel);
 router.post('/scan', protect, authorize('Admin', 'Volunteer'), attendeeController.scanAttendee);
+router.get('/', protect, authorize('Admin'), attendeeController.getAllAttendees);
+router.post('/send-email/:id', protect, authorize('Admin'), attendeeController.sendManualEmail);
+router.post('/send-bulk', protect, authorize('Admin'), attendeeController.sendBulkEmails);
 
 module.exports = router;

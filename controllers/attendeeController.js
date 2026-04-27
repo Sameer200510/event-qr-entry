@@ -4,6 +4,7 @@ const Attendee = require('../models/Attendee');
 const ScanLog = require('../models/ScanLog');
 const archiver = require('archiver');
 const QRCode = require('qrcode');
+const { sendQrEmail } = require('../utils/email');
 
 exports.scanAttendee = async (req, res) => {
   // Helper to log every scan attempt asynchronously (fire & forget)
@@ -269,5 +270,56 @@ exports.uploadExcel = async (req, res) => {
   } catch (error) {
     console.error('Error in upload-excel:', error);
     res.status(500).json({ error: 'Failed to process Excel file.' });
+  }
+};
+
+exports.sendManualEmail = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const attendee = await Attendee.findById(id);
+    
+    if (!attendee) return res.status(404).json({ error: 'Attendee not found' });
+    if (!attendee.email) return res.status(400).json({ error: 'Attendee has no email address' });
+
+    const qrCodeDataUrl = await QRCode.toDataURL(attendee.qrLink);
+    await sendQrEmail(attendee, qrCodeDataUrl);
+
+    res.status(200).json({ message: `QR Code sent to ${attendee.email}` });
+  } catch (error) {
+    console.error('Error sending manual email:', error);
+    res.status(500).json({ error: 'Failed to send email' });
+  }
+};
+
+exports.sendBulkEmails = async (req, res) => {
+  try {
+    const attendees = await Attendee.find({ email: { $exists: true, $ne: '' } });
+    
+    if (attendees.length === 0) {
+      return res.status(400).json({ error: 'No attendees with emails found' });
+    }
+
+    // Process in background
+    res.status(200).json({ message: `Started sending ${attendees.length} emails in the background.` });
+
+    for (const attendee of attendees) {
+      try {
+        const qrCodeDataUrl = await QRCode.toDataURL(attendee.qrLink);
+        await sendQrEmail(attendee, qrCodeDataUrl);
+      } catch (err) {
+        console.error(`Bulk email failed for ${attendee.roll}:`, err.message);
+      }
+    }
+  } catch (error) {
+    console.error('Error in bulk email:', error);
+  }
+};
+
+exports.getAllAttendees = async (req, res) => {
+  try {
+    const attendees = await Attendee.find().sort({ createdAt: -1 });
+    res.json(attendees);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch attendees' });
   }
 };
