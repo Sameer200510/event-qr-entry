@@ -20,10 +20,12 @@ export default function AdminDashboard() {
 
   const fetchAttendees = async () => {
     try {
+      console.log('Fetching attendees from API...');
       const { data } = await api.get('/attendees');
+      console.log('Received attendees data:', data);
       setAttendees(data);
     } catch (err) {
-      console.error('Failed to fetch attendees');
+      console.error('Failed to fetch attendees:', err);
     }
   };
 

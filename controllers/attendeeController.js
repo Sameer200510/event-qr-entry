@@ -324,9 +324,18 @@ exports.sendBulkEmails = async (req, res) => {
 
 exports.getAllAttendees = async (req, res) => {
   try {
+    const fs = require('fs');
+    const logMsg = `${new Date().toISOString()} - GET /api/attendees - User: ${req.user?.username}, Role: ${req.user?.role}\n`;
+    fs.appendFileSync('debug.log', logMsg);
+    
     const attendees = await Attendee.find().sort({ createdAt: -1 });
+    
+    fs.appendFileSync('debug.log', `${new Date().toISOString()} - Found ${attendees.length} attendees in database.\n`);
+    
     res.json(attendees);
   } catch (error) {
+    const fs = require('fs');
+    fs.appendFileSync('debug.log', `${new Date().toISOString()} - Error: ${error.message}\n`);
     res.status(500).json({ error: 'Failed to fetch attendees' });
   }
 };
