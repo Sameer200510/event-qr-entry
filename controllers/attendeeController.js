@@ -276,13 +276,14 @@ exports.uploadExcel = async (req, res) => {
 exports.sendManualEmail = async (req, res) => {
   try {
     const { id } = req.params;
+    const { message } = req.body;
     const attendee = await Attendee.findById(id);
     
     if (!attendee) return res.status(404).json({ error: 'Attendee not found' });
     if (!attendee.email) return res.status(400).json({ error: 'Attendee has no email address' });
 
     const qrCodeDataUrl = await QRCode.toDataURL(attendee.qrLink);
-    await sendQrEmail(attendee, qrCodeDataUrl);
+    await sendQrEmail(attendee, qrCodeDataUrl, message);
 
     res.status(200).json({ message: `QR Code sent to ${attendee.email}` });
   } catch (error) {
@@ -293,6 +294,7 @@ exports.sendManualEmail = async (req, res) => {
 
 exports.sendBulkEmails = async (req, res) => {
   try {
+    const { message } = req.body;
     const attendees = await Attendee.find({ email: { $exists: true, $ne: '' } });
     
     if (attendees.length === 0) {
@@ -305,7 +307,7 @@ exports.sendBulkEmails = async (req, res) => {
     for (const attendee of attendees) {
       try {
         const qrCodeDataUrl = await QRCode.toDataURL(attendee.qrLink);
-        await sendQrEmail(attendee, qrCodeDataUrl);
+        await sendQrEmail(attendee, qrCodeDataUrl, message);
       } catch (err) {
         console.error(`Bulk email failed for ${attendee.roll}:`, err.message);
       }

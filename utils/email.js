@@ -13,7 +13,7 @@ const transporter = nodemailer.createTransport({
 /**
  * Send QR Email to attendee
  */
-const sendQrEmail = async (attendee, qrCodeDataUrl) => {
+const sendQrEmail = async (attendee, qrCodeDataUrl, customMessage = '') => {
   if (!process.env.SMTP_USER) {
     console.log(`[NO_SMTP_ENV] QR Link for ${attendee.email || attendee.roll}: ${attendee.qrLink}`);
     return;
@@ -31,7 +31,8 @@ const sendQrEmail = async (attendee, qrCodeDataUrl) => {
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
         <h2 style="color: #4F46E5; text-align: center;">Hello, ${attendee.name}!</h2>
-        <p>Thank you for registering for our event. Below is your unique QR code for entry.</p>
+        
+        ${customMessage ? `<div style="background-color: #EEF2FF; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #4F46E5; color: #3730A3;">${customMessage}</div>` : '<p>Thank you for registering for our event. Below is your unique QR code for entry.</p>'}
         
         <div style="text-align: center; margin: 30px 0;">
           <img src="cid:qrcode" alt="QR Code" style="width: 200px; height: 200px; border: 5px solid #f3f4f6; border-radius: 10px;" />

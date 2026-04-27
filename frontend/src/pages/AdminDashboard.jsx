@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Upload, FileSpreadsheet, Download, Settings, Loader2, Mail, CheckCircle2, User, Users, Send } from 'lucide-react';
+import { Upload, FileSpreadsheet, Download, Settings, Loader2, Mail, CheckCircle2, User, Users, Send, MessageSquare } from 'lucide-react';
 import api from '../utils/api';
 
 export default function AdminDashboard() {
@@ -12,6 +12,7 @@ export default function AdminDashboard() {
   const [attendees, setAttendees] = useState([]);
   const [emailLoading, setEmailLoading] = useState(null); 
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [customMessage, setCustomMessage] = useState('');
 
   useEffect(() => {
     fetchAttendees();
@@ -93,7 +94,7 @@ export default function AdminDashboard() {
   const handleSendManualEmail = async (id) => {
     setEmailLoading(id);
     try {
-      await api.post(`/attendees/send-email/${id}`);
+      await api.post(`/attendees/send-email/${id}`, { message: customMessage });
       alert('Email sent successfully!');
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to send email');
@@ -106,7 +107,7 @@ export default function AdminDashboard() {
     if (!confirm('Are you sure you want to send QR emails to ALL registered attendees? This may take a few minutes.')) return;
     setBulkLoading(true);
     try {
-      const { data } = await api.post('/attendees/send-bulk');
+      const { data } = await api.post('/attendees/send-bulk', { message: customMessage });
       alert(data.message);
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to start bulk email process');
@@ -232,6 +233,24 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Email Configuration Section */}
+      <div className="glass-panel p-6 md:p-8 space-y-6">
+        <div className="flex items-center gap-3 border-b pb-4">
+          <MessageSquare className="text-brand-600" />
+          <h3 className="text-xl font-bold text-slate-800">Email Configuration</h3>
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-slate-700">Custom Message (Optional)</label>
+          <textarea 
+            placeholder="Write a message to be included in the QR email... (e.g. Please bring your ID card)"
+            className="w-full h-32 p-4 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-brand-500 resize-none transition-shadow"
+            value={customMessage}
+            onChange={(e) => setCustomMessage(e.target.value)}
+          />
+          <p className="text-xs text-slate-400">This message will appear above the QR code in the email.</p>
         </div>
       </div>
 
