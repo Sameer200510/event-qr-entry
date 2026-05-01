@@ -1,10 +1,3 @@
-const nodemailer = require('nodemailer');
-const dns = require('dns');
-
-/**
- * Send QR Email to attendee using Resend HTTP API
- * This bypasses SMTP blocks and connection timeouts.
- */
 const sendQrEmail = async (attendee, qrCodeDataUrl, customMessage = '') => {
   const apiKey = process.env.SMTP_PASS; // Using the key from env
 
@@ -74,6 +67,5 @@ const sendQrEmail = async (attendee, qrCodeDataUrl, customMessage = '') => {
 };
 
 module.exports = {
-  transporter,
   sendQrEmail
 };
