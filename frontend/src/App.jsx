@@ -14,7 +14,7 @@ function App() {
     setRole(null);
   };
 
-  const isVolunteer = role === 'Volunteer';
+  const isVolunteer = role === 'Volunteer' || role === 'EntryVolunteer' || role === 'FoodVolunteer';
 
   return (
     <Router>
@@ -43,7 +43,7 @@ function App() {
           <Route path="/" element={<Navigate to={role ? (role === 'Admin' ? '/admin' : '/volunteer') : '/login'} />} />
           <Route path="/login" element={!role ? <Login setRole={setRole} /> : <Navigate to="/" />} />
           <Route path="/admin" element={role === 'Admin' ? <AdminDashboard /> : <Navigate to="/" />} />
-          <Route path="/volunteer" element={role ? <VolunteerScanner onLogout={handleLogout} /> : <Navigate to="/login" />} />
+          <Route path="/volunteer" element={role ? <VolunteerScanner role={role} onLogout={handleLogout} /> : <Navigate to="/login" />} />
           <Route path="/verify/:token" element={<ExternalVerify />} />
         </Routes>
       </div>

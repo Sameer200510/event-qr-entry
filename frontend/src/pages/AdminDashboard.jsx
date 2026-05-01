@@ -13,6 +13,9 @@ export default function AdminDashboard() {
   const [emailLoading, setEmailLoading] = useState(null); 
   const [bulkLoading, setBulkLoading] = useState(false);
   const [customMessage, setCustomMessage] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterEntry, setFilterEntry] = useState('all'); // all, entry_done, entry_pending
+  const [filterFood, setFilterFood] = useState('all');   // all, food_done, food_pending
 
   useEffect(() => {
     fetchAttendees();
@@ -259,24 +262,44 @@ export default function AdminDashboard() {
 
       {/* Attendee List Section */}
       <div id="attendee-list" className="glass-panel p-6 md:p-8 space-y-6">
+        {/* Stats Row */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl">
+            <p className="text-emerald-600 text-xs font-bold uppercase tracking-wider">Total Admitted</p>
+            <p className="text-emerald-800 text-2xl font-black">{attendees.filter(a => a.entryStatus).length}</p>
+          </div>
+          <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl">
+            <p className="text-amber-600 text-xs font-bold uppercase tracking-wider">Food Distributed</p>
+            <p className="text-amber-800 text-2xl font-black">{attendees.filter(a => a.foodStatus).length}</p>
+          </div>
+          <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl">
+            <p className="text-blue-600 text-xs font-bold uppercase tracking-wider">Pending Entry</p>
+            <p className="text-blue-800 text-2xl font-black">{attendees.filter(a => !a.entryStatus).length}</p>
+          </div>
+          <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl">
+            <p className="text-slate-600 text-xs font-bold uppercase tracking-wider">Total Attendees</p>
+            <p className="text-slate-800 text-2xl font-black">{attendees.length}</p>
+          </div>
+        </div>
+
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-6">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-brand-50 text-brand-600 rounded-lg">
               <Users size={24} />
             </div>
             <div>
-              <h3 className="text-xl font-bold text-slate-800">Attendee List & QR Distribution</h3>
+              <h3 className="text-xl font-bold text-slate-800">Attendee List & Status</h3>
               <p className="text-sm text-slate-500">{attendees.length} total entries</p>
             </div>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <button 
               onClick={handleSendBulkEmails} 
               disabled={bulkLoading || attendees.filter(a => !a.emailSent).length === 0}
               className="premium-button bg-brand-600 hover:bg-brand-700 text-sm py-2 px-4 flex items-center gap-2 shadow-md transition-all active:scale-95"
             >
               {bulkLoading ? <Loader2 className="animate-spin w-4 h-4" /> : <Send size={16} />}
-              Send Pending QR Emails
+              Bulk Emails
             </button>
             <button onClick={fetchAttendees} className="secondary-button text-sm py-2 px-4">
               Refresh
@@ -284,76 +307,139 @@ export default function AdminDashboard() {
           </div>
         </div>
 
+        {/* Search & Filters */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+          <input 
+            type="text" 
+            placeholder="Search by name or roll..."
+            className="px-4 py-2.5 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-brand-500 text-sm"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+          <select 
+            className="px-4 py-2.5 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-brand-500 text-sm bg-white"
+            value={filterEntry}
+            onChange={(e) => setFilterEntry(e.target.value)}
+          >
+            <option value="all">Entry: All</option>
+            <option value="entry_done">Entry: Done</option>
+            <option value="entry_pending">Entry: Pending</option>
+          </select>
+          <select 
+            className="px-4 py-2.5 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-brand-500 text-sm bg-white"
+            value={filterFood}
+            onChange={(e) => setFilterFood(e.target.value)}
+          >
+            <option value="all">Food: All</option>
+            <option value="food_done">Food: Done</option>
+            <option value="food_pending">Food: Pending</option>
+          </select>
+        </div>
+
         <div className="overflow-x-auto rounded-xl border border-slate-100 shadow-sm">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 text-slate-600 text-sm font-semibold">
-                <th className="p-4 border-b">Name</th>
-                <th className="p-4 border-b">Roll Number</th>
-                <th className="p-4 border-b text-center">Email Status</th>
+                <th className="p-4 border-b">Attendee</th>
+                <th className="p-4 border-b">Roll No</th>
                 <th className="p-4 border-b text-center">Entry Status</th>
+                <th className="p-4 border-b text-center">Food Status</th>
                 <th className="p-4 border-b text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {attendees.length === 0 ? (
+              {attendees
+                .filter(a => {
+                  const matchesSearch = a.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                       a.roll.toLowerCase().includes(searchTerm.toLowerCase());
+                  const matchesEntry = filterEntry === 'all' || 
+                                      (filterEntry === 'entry_done' && a.entryStatus) || 
+                                      (filterEntry === 'entry_pending' && !a.entryStatus);
+                  const matchesFood = filterFood === 'all' || 
+                                     (filterFood === 'food_done' && a.foodStatus) || 
+                                     (filterFood === 'food_pending' && !a.foodStatus);
+                  return matchesSearch && matchesEntry && matchesFood;
+                })
+                .length === 0 ? (
                 <tr>
                   <td colSpan="5" className="p-12 text-center text-slate-400 italic">
-                    No attendees registered yet. Upload an Excel file to get started.
+                    No results found matching your filters.
                   </td>
                 </tr>
               ) : (
-                attendees.map(a => (
-                  <tr key={a._id} className="hover:bg-slate-50 transition-colors group">
-                    <td className="p-4">
-                      <p className="font-semibold text-slate-800">{a.name}</p>
-                      <p className="text-xs text-slate-400">{a.email || 'No Email'}</p>
-                    </td>
-                    <td className="p-4 text-slate-600 font-medium">{a.roll}</td>
-                    <td className="p-4 text-center">
-                      {a.emailSent ? (
-                        <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 px-3 py-1 rounded-full text-xs font-bold border border-green-100">
-                          <Check size={12} /> Sent
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 px-3 py-1 rounded-full text-xs font-bold border border-amber-100">
-                          <Clock size={12} /> Pending
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-4 text-center">
-                      <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold border ${
-                        a.status === 'USED' 
-                          ? 'bg-blue-50 text-blue-700 border-blue-100' 
-                          : 'bg-slate-50 text-slate-500 border-slate-100'
-                      }`}>
-                        {a.status === 'USED' ? 'Checked In' : 'Not Entered'}
-                      </span>
-                    </td>
-                    <td className="p-4 text-right">
-                      <button
-                        onClick={() => handleSendManualEmail(a._id)}
-                        disabled={!a.email || emailLoading === a._id}
-                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm ${
-                          !a.email 
-                            ? 'text-slate-300 cursor-not-allowed bg-slate-50' 
-                            : a.emailSent
-                              ? 'text-brand-600 bg-white border border-brand-200 hover:bg-brand-50'
-                              : 'text-white bg-brand-600 hover:bg-brand-700'
-                        }`}
-                      >
-                        {emailLoading === a._id ? (
-                          <Loader2 className="animate-spin w-4 h-4" />
-                        ) : a.emailSent ? (
-                          <Send size={16} />
-                        ) : (
-                          <Mail size={16} />
-                        )}
-                        <span>{a.emailSent ? 'Resend' : 'Send QR'}</span>
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                attendees
+                  .filter(a => {
+                    const matchesSearch = a.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                         a.roll.toLowerCase().includes(searchTerm.toLowerCase());
+                    const matchesEntry = filterEntry === 'all' || 
+                                        (filterEntry === 'entry_done' && a.entryStatus) || 
+                                        (filterEntry === 'entry_pending' && !a.entryStatus);
+                    const matchesFood = filterFood === 'all' || 
+                                       (filterFood === 'food_done' && a.foodStatus) || 
+                                       (filterFood === 'food_pending' && !a.foodStatus);
+                    return matchesSearch && matchesEntry && matchesFood;
+                  })
+                  .map(a => (
+                    <tr key={a._id} className="hover:bg-slate-50 transition-colors group">
+                      <td className="p-4">
+                        <p className="font-semibold text-slate-800">{a.name}</p>
+                        <p className="text-xs text-slate-400">{a.emailSent ? '📧 QR Sent' : '⏳ QR Not Sent'}</p>
+                      </td>
+                      <td className="p-4 text-slate-600 font-medium">{a.roll}</td>
+                      <td className="p-4 text-center">
+                        <div className="flex flex-col items-center gap-1">
+                          <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black uppercase border ${
+                            a.entryStatus 
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
+                              : 'bg-slate-50 text-slate-400 border-slate-100'
+                          }`}>
+                            {a.entryStatus ? 'Checked In' : 'Pending'}
+                          </span>
+                          {a.entryScannedAt && (
+                            <span className="text-[9px] text-slate-400 font-medium">
+                              {new Date(a.entryScannedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-4 text-center">
+                        <div className="flex flex-col items-center gap-1">
+                          <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black uppercase border ${
+                            a.foodStatus 
+                              ? 'bg-amber-50 text-amber-700 border-amber-100' 
+                              : 'bg-slate-50 text-slate-400 border-slate-100'
+                          }`}>
+                            {a.foodStatus ? 'Collected' : 'Pending'}
+                          </span>
+                          {a.foodScannedAt && (
+                            <span className="text-[9px] text-slate-400 font-medium">
+                              {new Date(a.foodScannedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-4 text-right">
+                        <button
+                          onClick={() => handleSendManualEmail(a._id)}
+                          disabled={!a.email || emailLoading === a._id}
+                          className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
+                            !a.email 
+                              ? 'text-slate-300 cursor-not-allowed bg-slate-50' 
+                              : a.emailSent
+                                ? 'text-brand-600 bg-white border border-brand-200 hover:bg-brand-50'
+                                : 'text-white bg-brand-600 hover:bg-brand-700'
+                          }`}
+                        >
+                          {emailLoading === a._id ? (
+                            <Loader2 className="animate-spin w-3 h-3" />
+                          ) : (
+                            <Mail size={14} />
+                          )}
+                          <span>{a.emailSent ? 'Resend' : 'Send'}</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))
               )}
             </tbody>
           </table>

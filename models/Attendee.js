@@ -22,6 +22,20 @@ const AttendeeSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  entryStatus: {
+    type: Boolean,
+    default: false,
+  },
+  foodStatus: {
+    type: Boolean,
+    default: false,
+  },
+  entryScannedAt: {
+    type: Date,
+  },
+  foodScannedAt: {
+    type: Date,
+  },
   status: {
     type: String,
     enum: ['UNUSED', 'USED'],

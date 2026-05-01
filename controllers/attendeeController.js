@@ -7,7 +7,7 @@ const QRCode = require('qrcode');
 const { sendQrEmail } = require('../utils/email');
 
 exports.scanAttendee = async (req, res) => {
-  // Helper to log every scan attempt asynchronously (fire & forget)
+  // Helper to log every scan attempt
   const logScan = (data) => {
     ScanLog.create(data).catch(err => console.error('ScanLog error:', err.message));
   };
@@ -16,83 +16,112 @@ exports.scanAttendee = async (req, res) => {
   const userAgent = req.headers['user-agent'] || 'unknown';
 
   try {
-    const { token } = req.body;
+    const { token, type = 'entry' } = req.body; // Default to entry for backward compatibility
     if (!token) return res.status(400).json({ error: 'Token is required' });
+
+    // Role-based validation
+    if (req.user.role === 'EntryVolunteer' && type !== 'entry') {
+      return res.status(403).json({ error: 'Entry volunteers can only perform entry scans.' });
+    }
+    if (req.user.role === 'FoodVolunteer' && type !== 'food') {
+      return res.status(403).json({ error: 'Food volunteers can only perform food scans.' });
+    }
 
     const attendee = await Attendee.findOne({ token });
 
-    // Invalid token
     if (!attendee) {
-      logScan({ token, success: false, resultCode: 'INVALID_TOKEN', ip, userAgent });
+      logScan({ token, type, success: false, resultCode: 'INVALID_TOKEN', ip, userAgent });
       return res.status(404).json({ error: 'Invalid or unknown QR token.' });
     }
 
-    // ✅ Already verified via OTP - show green success, NOT an error
-    if (attendee.status === 'USED' && attendee.entry_method === 'OTP') {
+    if (type === 'entry') {
+      // ✅ Entry Scan Logic
+      if (attendee.entryStatus) {
+        logScan({
+          token, type, attendeeId: attendee._id, attendeeName: attendee.name,
+          attendeeRoll: attendee.roll, success: false, resultCode: 'ALREADY_USED_ENTRY',
+          ip, userAgent
+        });
+        return res.status(400).json({
+          error: `${attendee.name} has already been scanned in for entry.`,
+          attendee: { name: attendee.name, roll: attendee.roll, entryScannedAt: attendee.entryScannedAt }
+        });
+      }
+
+      // First time entry
+      const updated = await Attendee.findOneAndUpdate(
+        { _id: attendee._id, entryStatus: false },
+        { $set: { entryStatus: true, status: 'USED', entry_method: 'QR', entryScannedAt: new Date() } },
+        { new: true }
+      );
+
+      if (!updated) {
+        return res.status(400).json({ error: 'Entry was just scanned by another device.' });
+      }
+
       logScan({
-        token,
-        attendeeId: attendee._id,
-        attendeeName: attendee.name,
-        attendeeRoll: attendee.roll,
-        success: true,
-        resultCode: 'ALREADY_USED_OTP',
-        ip,
-        userAgent
+        token, type, attendeeId: updated._id, attendeeName: updated.name,
+        attendeeRoll: updated.roll, success: true, resultCode: 'ALLOWED_ENTRY',
+        ip, userAgent
       });
+
       return res.status(200).json({
-        alreadyVerified: true,
-        entry_method: 'OTP',
-        message: `${attendee.name} was already verified via OTP.`,
-        attendee: { name: attendee.name, roll: attendee.roll, checkedInAt: attendee.checkedInAt }
+        message: 'Entry Allowed!',
+        attendee: { name: updated.name, roll: updated.roll, entryScannedAt: updated.entryScannedAt }
       });
-    }
 
-    // ❌ Already scanned via QR - block
-    if (attendee.status === 'USED' && attendee.entry_method === 'QR') {
+    } else if (type === 'food') {
+      // 🍽️ Food Scan Logic
+      // 1. Must have entered first
+      if (!attendee.entryStatus) {
+        logScan({
+          token, type, attendeeId: attendee._id, attendeeName: attendee.name,
+          attendeeRoll: attendee.roll, success: false, resultCode: 'ENTRY_REQUIRED_FOR_FOOD',
+          ip, userAgent
+        });
+        return res.status(400).json({
+          error: `Entry required before food distribution for ${attendee.name}.`,
+          attendee: { name: attendee.name, roll: attendee.roll }
+        });
+      }
+
+      // 2. Must not have taken food yet
+      if (attendee.foodStatus) {
+        logScan({
+          token, type, attendeeId: attendee._id, attendeeName: attendee.name,
+          attendeeRoll: attendee.roll, success: false, resultCode: 'ALREADY_USED_FOOD',
+          ip, userAgent
+        });
+        return res.status(400).json({
+          error: `Food already collected by ${attendee.name}.`,
+          attendee: { name: attendee.name, roll: attendee.roll, foodScannedAt: attendee.foodScannedAt }
+        });
+      }
+
+      // Valid food collection
+      const updated = await Attendee.findOneAndUpdate(
+        { _id: attendee._id, foodStatus: false, entryStatus: true },
+        { $set: { foodStatus: true, foodScannedAt: new Date() } },
+        { new: true }
+      );
+
+      if (!updated) {
+        return res.status(400).json({ error: 'Food collection was just processed by another device.' });
+      }
+
       logScan({
-        token,
-        attendeeId: attendee._id,
-        attendeeName: attendee.name,
-        attendeeRoll: attendee.roll,
-        success: false,
-        resultCode: 'ALREADY_USED_QR',
-        ip,
-        userAgent
+        token, type, attendeeId: updated._id, attendeeName: updated.name,
+        attendeeRoll: updated.roll, success: true, resultCode: 'ALLOWED_FOOD',
+        ip, userAgent
       });
-      return res.status(400).json({
-        error: `${attendee.name} has already been scanned in via QR.`,
-        attendee: { name: attendee.name, roll: attendee.roll }
+
+      return res.status(200).json({
+        message: 'Food Distribution Allowed!',
+        attendee: { name: updated.name, roll: updated.roll, foodScannedAt: updated.foodScannedAt }
       });
     }
 
-    // ✅ First scan - mark as USED via QR (atomic)
-    const updated = await Attendee.findOneAndUpdate(
-      { _id: attendee._id, status: 'UNUSED' },
-      { $set: { status: 'USED', entry_method: 'QR', checkedInAt: new Date() } },
-      { new: true }
-    );
-
-    if (!updated) {
-      // Race condition - someone else scanned between our findOne and findOneAndUpdate
-      logScan({ token, success: false, resultCode: 'ALREADY_USED_QR', ip, userAgent });
-      return res.status(400).json({ error: 'Attendee was just scanned by another device.' });
-    }
-
-    logScan({
-      token,
-      attendeeId: updated._id,
-      attendeeName: updated.name,
-      attendeeRoll: updated.roll,
-      success: true,
-      resultCode: 'ALLOWED',
-      ip,
-      userAgent
-    });
-
-    res.status(200).json({
-      message: 'Entry Allowed!',
-      attendee: { name: updated.name, roll: updated.roll, checkedInAt: updated.checkedInAt }
-    });
+    res.status(400).json({ error: 'Invalid scan type.' });
   } catch (err) {
     console.error('Scan error:', err);
     res.status(500).json({ error: 'Server error during verification.' });

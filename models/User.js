@@ -12,9 +12,9 @@ const UserSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['Admin', 'Volunteer'],
+    enum: ['Admin', 'Volunteer', 'EntryVolunteer', 'FoodVolunteer'],
     required: true,
-    default: 'Volunteer'
+    default: 'EntryVolunteer'
   }
 }, { timestamps: true });
 

@@ -112,7 +112,7 @@ exports.verifyOtp = async (req, res) => {
       return res.status(404).json({ error: 'Attendee not found' });
     }
 
-    if (attendee.status === 'USED') {
+    if (attendee.entryStatus) {
       return res.status(400).json({ error: 'Attendee has already checked in.' });
     }
 
@@ -139,15 +139,15 @@ exports.verifyOtp = async (req, res) => {
       return res.status(400).json({ error: 'Invalid OTP' });
     }
 
-    // Success! Mark as USED (atomic via standard mongoose save, in larger systems `findOneAndUpdate` with filters is ideal)
-    // Let's use atomic update to guarantee no race conditions
+    // Success! Mark as USED (atomic)
     const updatedAttendee = await Attendee.findOneAndUpdate(
-      { _id: attendee._id, status: 'UNUSED' }, // strict conditional
+      { _id: attendee._id, entryStatus: false }, // strict conditional
       {
         $set: {
+          entryStatus: true,
           status: 'USED',
           entry_method: 'OTP',
-          checkedInAt: new Date()
+          entryScannedAt: new Date()
         },
         $unset: { otp: 1 } // clear OTP
       },
@@ -155,7 +155,6 @@ exports.verifyOtp = async (req, res) => {
     );
 
     if (!updatedAttendee) {
-      // If it became null, it means status changed to USED slightly before this query!
       return res.status(400).json({ error: 'Attendee has already checked in' });
     }
 
