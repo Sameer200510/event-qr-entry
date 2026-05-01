@@ -1,5 +1,6 @@
 const Attendee = require('../models/Attendee');
 const nodemailer = require('nodemailer');
+const dns = require('dns');
 
 // Setup generic transport based on .env
 const transporter = nodemailer.createTransport({
@@ -14,7 +15,9 @@ const transporter = nodemailer.createTransport({
     rejectUnauthorized: false,
     minVersion: 'TLSv1.2'
   },
-  family: 4
+  lookup: (hostname, options, callback) => {
+    dns.lookup(hostname, { family: 4 }, callback);
+  }
 });
 
 exports.sendOtp = async (req, res) => {
