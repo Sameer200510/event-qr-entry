@@ -4,19 +4,16 @@ const dns = require('dns');
 
 // Setup generic transport based on .env
 const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false,
+  host: '74.125.130.108',
+  port: 465,
+  secure: true,
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS
   },
   tls: {
-    rejectUnauthorized: false,
-    minVersion: 'TLSv1.2'
-  },
-  lookup: (hostname, options, callback) => {
-    dns.lookup(hostname, { family: 4 }, callback);
+    servername: 'smtp.gmail.com',
+    rejectUnauthorized: false
   }
 });
 

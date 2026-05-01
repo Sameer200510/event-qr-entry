@@ -2,19 +2,16 @@ const nodemailer = require('nodemailer');
 const dns = require('dns');
 
 const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false, // Port 587 uses STARTTLS
+  host: '74.125.130.108', // Hardcoded smtp.gmail.com IPv4 to bypass DNS issues
+  port: 465,
+  secure: true,
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS
   },
   tls: {
-    rejectUnauthorized: false,
-    minVersion: 'TLSv1.2'
-  },
-  lookup: (hostname, options, callback) => {
-    dns.lookup(hostname, { family: 4 }, callback);
+    servername: 'smtp.gmail.com', // Required for SSL certificate verification with IP host
+    rejectUnauthorized: false
   }
 });
 
