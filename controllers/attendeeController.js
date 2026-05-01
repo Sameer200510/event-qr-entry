@@ -300,14 +300,20 @@ exports.sendManualEmail = async (req, res) => {
 exports.sendBulkEmails = async (req, res) => {
   try {
     const { message } = req.body;
-    const attendees = await Attendee.find({ email: { $exists: true, $ne: '' } });
+    // Only fetch attendees who haven't received the email yet
+    const attendees = await Attendee.find({ 
+      email: { $exists: true, $ne: '' },
+      emailSent: { $ne: true }
+    });
     
     if (attendees.length === 0) {
-      return res.status(400).json({ error: 'No attendees with emails found' });
+      return res.status(400).json({ error: 'No pending attendees with emails found' });
     }
 
     // Process in background
-    res.status(200).json({ message: `Started sending ${attendees.length} emails in the background.` });
+    res.status(200).json({ message: `Started sending ${attendees.length} emails in the background. This may take a few minutes.` });
+
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
     for (const attendee of attendees) {
       try {
@@ -315,6 +321,9 @@ exports.sendBulkEmails = async (req, res) => {
         await sendQrEmail(attendee, qrCodeDataUrl, message);
         attendee.emailSent = true;
         await attendee.save();
+        
+        // Add a 1s delay between emails to avoid Gmail rate limits
+        await sleep(1000);
       } catch (err) {
         console.error(`Bulk email failed for ${attendee.roll}:`, err.message);
       }
