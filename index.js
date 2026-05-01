@@ -1,6 +1,12 @@
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
+const dns = require('node:dns');
+
+// Force IPv4 as primary to avoid ENETUNREACH errors on IPv6-only lookups (common on Render/Cloud)
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder('ipv4first');
+}
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const attendeeRoutes = require('./routes/attendeeRoutes');
