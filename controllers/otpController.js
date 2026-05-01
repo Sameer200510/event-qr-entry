@@ -3,6 +3,8 @@ const nodemailer = require('nodemailer');
 const dns = require('dns');
 
 // Setup generic transport based on .env
+const { google } = require('googleapis');
+
 exports.sendOtp = async (req, res) => {
   try {
     const { roll } = req.body;
@@ -48,47 +50,46 @@ exports.sendOtp = async (req, res) => {
 
     await attendee.save();
 
-    const apiKey = process.env.SMTP_PASS;
-
-    if (!apiKey) {
-      console.log(`[NO_API_KEY] OTP for ${attendee.email || roll} is: ${code}`);
-      return res.status(200).json({ 
-        message: 'OTP generated (Console Only)', 
-        debug: 'SMTP_PASS is not set in .env' 
-      });
-    } 
-
     if (!attendee.email) {
       return res.status(400).json({ error: 'Attendee has no email address registered.' });
     }
 
+    // Gmail API Setup
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GMAIL_CLIENT_ID,
+      process.env.GMAIL_CLIENT_SECRET,
+      'https://developers.google.com/oauthplayground'
+    );
+
+    oauth2Client.setCredentials({
+      refresh_token: process.env.GMAIL_REFRESH_TOKEN
+    });
+
+    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+
+    // Build plain text MIME message
+    const str = [
+      `To: ${attendee.email}`,
+      `Subject: Your Event Entry OTP`,
+      `Content-Type: text/plain; charset=utf-8`,
+      '',
+      `Your One-Time Password for event entry is: ${code}. It expires in 2 minutes.`
+    ].join('\n');
+
+    const encodedMail = Buffer.from(str).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
     try {
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          from: 'Event Team <onboarding@resend.dev>',
-          to: attendee.email,
-          subject: 'Your Event Entry OTP',
-          text: `Your One-Time Password for event entry is: ${code}. It expires in 2 minutes.`
-        })
+      await gmail.users.messages.send({
+        userId: 'me',
+        requestBody: {
+          raw: encodedMail
+        }
       });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        res.status(200).json({ message: 'OTP sent to your email.' });
-      } else {
-        console.error("Resend API Error:", result);
-        throw new Error(result.message || 'Failed to send OTP via API');
-      }
+      res.status(200).json({ message: 'OTP sent to your email.' });
     } catch (mailErr) {
-      console.error("Email send error:", mailErr);
+      console.error("Gmail API Error:", mailErr);
       return res.status(500).json({ 
-        error: 'Failed to send email via API. Please check Resend API key.',
+        error: 'Failed to send OTP via Gmail API. Please check your credentials.',
         details: mailErr.message 
       });
     }

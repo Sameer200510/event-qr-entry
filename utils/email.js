@@ -1,17 +1,28 @@
-const sendQrEmail = async (attendee, qrCodeDataUrl, customMessage = '') => {
-  const apiKey = process.env.SMTP_PASS; // Using the key from env
+const { google } = require('googleapis');
 
-  if (!apiKey) {
-    console.log(`[NO_API_KEY] QR Link for ${attendee.email || attendee.roll}: ${attendee.qrLink}`);
-    return;
-  }
+/**
+ * Send QR Email to attendee using Gmail HTTP API
+ * This bypasses SMTP blocks and connection timeouts entirely.
+ */
+const sendQrEmail = async (attendee, qrCodeDataUrl, customMessage = '') => {
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GMAIL_CLIENT_ID,
+    process.env.GMAIL_CLIENT_SECRET,
+    'https://developers.google.com/oauthplayground'
+  );
+
+  oauth2Client.setCredentials({
+    refresh_token: process.env.GMAIL_REFRESH_TOKEN
+  });
+
+  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
   if (!attendee.email) {
     console.log(`[SKIP_EMAIL] Attendee ${attendee.roll} has no email.`);
     return;
   }
 
-  const html = `
+  const htmlContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
       <h2 style="color: #4F46E5; text-align: center;">Hello, ${attendee.name}!</h2>
       
@@ -32,34 +43,42 @@ const sendQrEmail = async (attendee, qrCodeDataUrl, customMessage = '') => {
     </div>
   `;
 
-  try {
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        from: 'Event Team <onboarding@resend.dev>', // Note: Replace with your verified domain later
-        to: attendee.email,
-        subject: 'Your QR Access Code for the Event',
-        html: html,
-        attachments: [
-          {
-            filename: 'qrcode.png',
-            content: qrCodeDataUrl.split('base64,')[1]
-          }
-        ]
-      })
-    });
+  // Build MIME Message
+  const boundary = 'foo_bar_baz';
+  const nl = '\n';
+  
+  const imageData = qrCodeDataUrl.split('base64,')[1];
+  
+  const str = [
+    `To: ${attendee.email}`,
+    `Subject: Your QR Access Code for the Event`,
+    `Content-Type: multipart/mixed; boundary=${boundary}`,
+    nl,
+    `--${boundary}`,
+    `Content-Type: text/html; charset=utf-8`,
+    nl,
+    htmlContent,
+    nl,
+    `--${boundary}`,
+    `Content-Type: image/png`,
+    `Content-Disposition: attachment; filename="qrcode.png"`,
+    `Content-Transfer-Encoding: base64`,
+    nl,
+    imageData,
+    nl,
+    `--${boundary}--`
+  ].join('\n');
 
-    const result = await response.json();
-    if (response.ok) {
-      console.log(`QR Email sent via API to ${attendee.email}`);
-    } else {
-      console.error(`Resend API Error for ${attendee.email}:`, result);
-      throw new Error(result.message || 'Failed to send email via API');
-    }
+  const encodedMail = Buffer.from(str).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+  try {
+    await gmail.users.messages.send({
+      userId: 'me',
+      requestBody: {
+        raw: encodedMail
+      }
+    });
+    console.log(`QR Email sent via Gmail API to ${attendee.email}`);
   } catch (error) {
     console.error(`Failed to send QR Email to ${attendee.email}:`, error.message);
     throw error;
