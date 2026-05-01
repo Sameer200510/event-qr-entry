@@ -4,19 +4,13 @@ const dns = require('dns');
 
 // Setup generic transport based on .env
 const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false,
-  connectionTimeout: 20000,
+  host: 'smtp.resend.com',
+  port: 465,
+  secure: true,
   auth: {
-    user: process.env.SMTP_USER,
+    user: 'resend',
     pass: process.env.SMTP_PASS
-  },
-  tls: {
-    rejectUnauthorized: false,
-    minVersion: 'TLSv1.2'
-  },
-  family: 4
+  }
 });
 
 exports.sendOtp = async (req, res) => {

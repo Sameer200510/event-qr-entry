@@ -2,23 +2,13 @@ const nodemailer = require('nodemailer');
 const dns = require('dns');
 
 const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false, 
-  pool: true, // Use connection pooling for bulk emails
-  maxConnections: 3,
-  connectionTimeout: 20000, // 20 seconds timeout
-  greetingTimeout: 20000,
-  socketTimeout: 20000,
+  host: 'smtp.resend.com',
+  port: 465,
+  secure: true,
   auth: {
-    user: process.env.SMTP_USER,
+    user: 'resend',
     pass: process.env.SMTP_PASS
-  },
-  tls: {
-    rejectUnauthorized: false,
-    minVersion: 'TLSv1.2'
-  },
-  family: 4 // Force IPv4
+  }
 });
 
 /**
