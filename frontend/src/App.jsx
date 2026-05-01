@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
 import VolunteerScanner from './pages/VolunteerScanner';
+import ExternalVerify from './pages/ExternalVerify';
 
 function App() {
   const [role, setRole] = useState(localStorage.getItem('role') || null);
@@ -43,6 +44,7 @@ function App() {
           <Route path="/login" element={!role ? <Login setRole={setRole} /> : <Navigate to="/" />} />
           <Route path="/admin" element={role === 'Admin' ? <AdminDashboard /> : <Navigate to="/" />} />
           <Route path="/volunteer" element={role ? <VolunteerScanner onLogout={handleLogout} /> : <Navigate to="/login" />} />
+          <Route path="/verify/:token" element={<ExternalVerify />} />
         </Routes>
       </div>
     </Router>

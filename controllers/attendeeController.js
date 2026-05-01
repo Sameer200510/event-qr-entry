@@ -188,7 +188,7 @@ exports.uploadExcel = async (req, res) => {
     const newAttendees = [];
     const outputData = [];
 
-    const host = req.protocol + '://' + req.get('host');
+    const frontendHost = process.env.FRONTEND_URL || (req.protocol + '://' + req.get('host'));
 
     for (const record of parsedData) {
       const outRow = { ...record.originalRow };
@@ -204,7 +204,9 @@ exports.uploadExcel = async (req, res) => {
           // Valid new record
           seenRollsInFile.add(record.roll);
           const token = uuidv4();
-          const qrLink = `${host}/verify/${token}`;
+          
+          // Structure the link so it can be handled by both frontend and legacy backend
+          const qrLink = `${frontendHost}/verify/${token}`;
           
           outRow['Token'] = token;
           outRow['QR_Link'] = qrLink;
