@@ -3,16 +3,6 @@ const nodemailer = require('nodemailer');
 const dns = require('dns');
 
 // Setup generic transport based on .env
-const transporter = nodemailer.createTransport({
-  host: 'smtp.resend.com',
-  port: 465,
-  secure: true,
-  auth: {
-    user: 'resend',
-    pass: process.env.SMTP_PASS
-  }
-});
-
 exports.sendOtp = async (req, res) => {
   try {
     const { roll } = req.body;
@@ -58,14 +48,13 @@ exports.sendOtp = async (req, res) => {
 
     await attendee.save();
 
-    // Send email (we don't await blocking it if possible, but simpler to await for UI loading state)
-    // In dev, if dummy is set, it will fail if not using Ethereal, so we catch error but don't crash
-    // Send email
-    if (!process.env.SMTP_USER) {
-      console.log(`[NO_SMTP_ENV] OTP for ${attendee.email || roll} is: ${code}`);
+    const apiKey = process.env.SMTP_PASS;
+
+    if (!apiKey) {
+      console.log(`[NO_API_KEY] OTP for ${attendee.email || roll} is: ${code}`);
       return res.status(200).json({ 
         message: 'OTP generated (Console Only)', 
-        debug: 'SMTP_USER is not set in .env' 
+        debug: 'SMTP_PASS is not set in .env' 
       });
     } 
 
@@ -74,17 +63,32 @@ exports.sendOtp = async (req, res) => {
     }
 
     try {
-      await transporter.sendMail({
-        from: `"Event Team" <${process.env.SMTP_USER}>`,
-        to: attendee.email,
-        subject: 'Your Event Entry OTP',
-        text: `Your One-Time Password for event entry is: ${code}. It expires in 2 minutes.`
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          from: 'Event Team <onboarding@resend.dev>',
+          to: attendee.email,
+          subject: 'Your Event Entry OTP',
+          text: `Your One-Time Password for event entry is: ${code}. It expires in 2 minutes.`
+        })
       });
-      res.status(200).json({ message: 'OTP sent to your email.' });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        res.status(200).json({ message: 'OTP sent to your email.' });
+      } else {
+        console.error("Resend API Error:", result);
+        throw new Error(result.message || 'Failed to send OTP via API');
+      }
     } catch (mailErr) {
       console.error("Email send error:", mailErr);
       return res.status(500).json({ 
-        error: 'Failed to send email. Please check server logs or SMTP config.',
+        error: 'Failed to send email via API. Please check Resend API key.',
         details: mailErr.message 
       });
     }
