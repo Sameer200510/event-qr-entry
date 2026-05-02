@@ -37,6 +37,22 @@ exports.scanAttendee = async (req, res) => {
     if (type === 'entry') {
       // ✅ Entry Scan Logic
       if (attendee.entryStatus) {
+        // If they already checked in via OTP, show a green warning instead of red error
+        if (attendee.entry_method === 'OTP') {
+          logScan({
+            token, type, attendeeId: attendee._id, attendeeName: attendee.name,
+            attendeeRoll: attendee.roll, success: true, resultCode: 'ALREADY_USED_OTP',
+            ip, userAgent
+          });
+          return res.status(200).json({
+            alreadyVerified: true,
+            entry_method: 'OTP',
+            message: `${attendee.name} was already verified via OTP.`,
+            attendee: { name: attendee.name, roll: attendee.roll, entryScannedAt: attendee.entryScannedAt }
+          });
+        }
+
+        // Standard QR duplicate scan
         logScan({
           token, type, attendeeId: attendee._id, attendeeName: attendee.name,
           attendeeRoll: attendee.roll, success: false, resultCode: 'ALREADY_USED_ENTRY',

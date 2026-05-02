@@ -29,7 +29,73 @@ export default function VolunteerScanner({ role, onLogout }) {
   const loadingRef   = useRef(false);
   const timerRef     = useRef(null);
 
-  // ... [Camera logic stays same] ...
+  // ── Camera lifecycle ───────────────────────────────────────────────────────
+  useEffect(() => {
+    if (useOtp) { stopCamera(); return; }
+    initCamera();
+    return () => stopCamera();
+  }, [useOtp]);
+
+  const initCamera = async () => {
+    setPermState('asking');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(() => {});
+      }
+      setPermState('granted');
+    } catch (err) {
+      console.error('Camera:', err);
+      setPermState('denied');
+    }
+  };
+
+  const stopCamera = () => {
+    cancelAnimationFrame(rafRef.current);
+    clearTimeout(timerRef.current);
+    if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
+    if (videoRef.current) videoRef.current.srcObject = null;
+    isScanRef.current = false;
+  };
+
+  const onVideoReady = () => {
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(scanFrame);
+  };
+
+  const scanFrame = () => {
+    const video = videoRef.current, canvas = canvasRef.current;
+    if (!video || !canvas || video.readyState < video.HAVE_ENOUGH_DATA) {
+      rafRef.current = requestAnimationFrame(scanFrame); return;
+    }
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'dontInvert' });
+    if (code?.data && !isScanRef.current && !loadingRef.current) {
+      isScanRef.current = true;
+      handleVerifyQR(code.data);
+    }
+    rafRef.current = requestAnimationFrame(scanFrame);
+  };
+
+  // Manually reset to scanning state
+  const readyForNext = () => {
+    clearTimeout(timerRef.current);
+    setScanResult(null);
+    setErrorMsg(null);
+    // Prevent immediate re-scan
+    setTimeout(() => {
+      isScanRef.current = false;
+    }, 1500);
+  };
 
   // ── QR Verify ─────────────────────────────────────────────────────────────
   const handleVerifyQR = async (rawToken) => {

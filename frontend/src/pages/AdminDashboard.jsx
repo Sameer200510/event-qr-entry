@@ -337,7 +337,7 @@ export default function AdminDashboard() {
         </div>
 
         <div className="overflow-x-auto rounded-xl border border-slate-100 shadow-sm">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[800px]">
             <thead>
               <tr className="bg-slate-50 text-slate-600 text-sm font-semibold">
                 <th className="p-4 border-b">Attendee</th>
