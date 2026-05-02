@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Dancing+Script:wght@600&display=swap');
 
 /* ── CSS Variables (Light Mode) ───────────────────────────────────── */
 :root {
@@ -332,16 +332,18 @@ select.input {
 /* ── Watermark ────────────────────────────────────────────────────── */
 .watermark {
   position: fixed;
-  bottom: 1rem;
+  bottom: 0.875rem;
   right: 1rem;
-  font-size: 0.6875rem;
+  font-family: 'Dancing Script', cursive;
+  font-size: 0.9rem;
+  font-weight: 600;
   color: var(--text-muted);
-  opacity: 0.5;
-  font-weight: 500;
+  opacity: 0.45;
   letter-spacing: 0.02em;
   pointer-events: none;
   z-index: 1;
   user-select: none;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
 /* ── Divider ──────────────────────────────────────────────────────── */
