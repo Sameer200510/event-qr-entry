@@ -33,32 +33,32 @@
   --radius-2xl: 1.5rem;
 }
 
-/* ── Dark Mode ────────────────────────────────────────────────────── */
+/* ── Dark Mode (AMOLED True Black) ───────────────────────────────── */
 .dark {
-  --bg: #070d1a;
-  --bg-secondary: #0f172a;
-  --surface: #111827;
-  --surface-2: #1a2236;
-  --border: #1e2d45;
-  --border-subtle: #162032;
-  --text-primary: #f0f6ff;
-  --text-secondary: #94a3b8;
-  --text-muted: #4b6080;
+  --bg: #000000;
+  --bg-secondary: #0a0a0a;
+  --surface: #111111;
+  --surface-2: #1a1a1a;
+  --border: #2a2a2a;
+  --border-subtle: #1a1a1a;
+  --text-primary: #f5f5f5;
+  --text-secondary: #a0a0a0;
+  --text-muted: #555555;
   --brand: #818cf8;
-  --brand-light: #1a1f3a;
+  --brand-light: #1a1a2e;
   --brand-dark: #6366f1;
   --green: #34d399;
-  --green-light: #052e1c;
+  --green-light: #0a1f15;
   --red: #f87171;
-  --red-light: #2d0a0a;
+  --red-light: #1f0a0a;
   --amber: #fbbf24;
-  --amber-light: #2d1800;
+  --amber-light: #1f1200;
   --blue: #60a5fa;
-  --blue-light: #0f1f3a;
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
-  --shadow: 0 4px 6px -1px rgba(0,0,0,0.5);
-  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.5);
-  --shadow-xl: 0 20px 25px -5px rgba(0,0,0,0.6);
+  --blue-light: #0a1525;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.8);
+  --shadow: 0 4px 6px -1px rgba(0,0,0,0.8);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.9);
+  --shadow-xl: 0 20px 25px -5px rgba(0,0,0,0.95);
 }
 
 /* ── Base ─────────────────────────────────────────────────────────── */

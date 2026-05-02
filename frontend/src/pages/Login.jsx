@@ -45,7 +45,7 @@ export default function Login({ setRole }) {
   ];
 
   const pageBg = dark
-    ? 'radial-gradient(ellipse 90% 70% at 20% 10%, #1a1550 0%, #070d1a 60%)'
+    ? '#000000'
     : 'radial-gradient(ellipse 90% 70% at 20% 10%, #dde4ff 0%, #f8fafc 65%)';
 
   return (
