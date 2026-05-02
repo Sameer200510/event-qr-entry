@@ -4,7 +4,7 @@ const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
-router.post('/send', protect, authorize('Admin', 'Volunteer'), sendOtp);
-router.post('/verify', protect, authorize('Admin', 'Volunteer'), verifyOtp);
+router.post('/send', protect, authorize('Admin', 'Volunteer', 'EntryVolunteer'), sendOtp);
+router.post('/verify', protect, authorize('Admin', 'Volunteer', 'EntryVolunteer'), verifyOtp);
 
 module.exports = router;
