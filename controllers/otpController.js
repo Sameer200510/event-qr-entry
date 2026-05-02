@@ -7,7 +7,7 @@ const { google } = require('googleapis');
 
 exports.sendOtp = async (req, res) => {
   try {
-    const { roll } = req.body;
+    const { roll, type = 'entry' } = req.body;
     if (!roll) {
       return res.status(400).json({ error: 'Roll number is required' });
     }
@@ -17,8 +17,13 @@ exports.sendOtp = async (req, res) => {
       return res.status(404).json({ error: 'Attendee not found' });
     }
 
-    if (attendee.status === 'USED') {
+    if (type === 'entry' && attendee.entryStatus) {
       return res.status(400).json({ error: 'Attendee has already checked in.' });
+    }
+
+    if (type === 'food') {
+      if (!attendee.entryStatus) return res.status(400).json({ error: 'Entry required before food distribution.' });
+      if (attendee.foodStatus) return res.status(400).json({ error: 'Food already collected.' });
     }
 
     const now = new Date();
@@ -67,13 +72,18 @@ exports.sendOtp = async (req, res) => {
 
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
+    const subjectText = type === 'food' ? 'Your Food Distribution OTP' : 'Your Event Entry OTP';
+    const bodyText = type === 'food' 
+      ? `Your One-Time Password for food distribution is: ${code}. It expires in 2 minutes.`
+      : `Your One-Time Password for event entry is: ${code}. It expires in 2 minutes.`;
+
     // Build plain text MIME message
     const str = [
       `To: ${attendee.email}`,
-      `Subject: Your Event Entry OTP`,
+      `Subject: ${subjectText}`,
       `Content-Type: text/plain; charset=utf-8`,
       '',
-      `Your One-Time Password for event entry is: ${code}. It expires in 2 minutes.`
+      bodyText
     ].join('\n');
 
     const encodedMail = Buffer.from(str).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -102,7 +112,7 @@ exports.sendOtp = async (req, res) => {
 
 exports.verifyOtp = async (req, res) => {
   try {
-    const { roll, otp } = req.body;
+    const { roll, otp, type = 'entry' } = req.body;
     if (!roll || !otp) {
       return res.status(400).json({ error: 'Roll number and OTP are required' });
     }
@@ -112,8 +122,13 @@ exports.verifyOtp = async (req, res) => {
       return res.status(404).json({ error: 'Attendee not found' });
     }
 
-    if (attendee.entryStatus) {
+    if (type === 'entry' && attendee.entryStatus) {
       return res.status(400).json({ error: 'Attendee has already checked in.' });
+    }
+
+    if (type === 'food') {
+      if (!attendee.entryStatus) return res.status(400).json({ error: 'Entry required before food distribution.' });
+      if (attendee.foodStatus) return res.status(400).json({ error: 'Food already collected.' });
     }
 
     if (!attendee.otp || !attendee.otp.code) {
@@ -139,23 +154,44 @@ exports.verifyOtp = async (req, res) => {
       return res.status(400).json({ error: 'Invalid OTP' });
     }
 
-    // Success! Mark as USED (atomic)
-    const updatedAttendee = await Attendee.findOneAndUpdate(
-      { _id: attendee._id, entryStatus: false }, // strict conditional
-      {
-        $set: {
-          entryStatus: true,
-          status: 'USED',
-          entry_method: 'OTP',
-          entryScannedAt: new Date()
-        },
-        $unset: { otp: 1 } // clear OTP
-      },
-      { new: true }
-    );
+    let updatedAttendee;
 
-    if (!updatedAttendee) {
-      return res.status(400).json({ error: 'Attendee has already checked in' });
+    if (type === 'entry') {
+      // Success! Mark as USED (atomic)
+      updatedAttendee = await Attendee.findOneAndUpdate(
+        { _id: attendee._id, entryStatus: false }, // strict conditional
+        {
+          $set: {
+            entryStatus: true,
+            status: 'USED',
+            entry_method: 'OTP',
+            entryScannedAt: new Date()
+          },
+          $unset: { otp: 1 } // clear OTP
+        },
+        { new: true }
+      );
+
+      if (!updatedAttendee) {
+        return res.status(400).json({ error: 'Attendee has already checked in' });
+      }
+    } else if (type === 'food') {
+      // Success! Mark food as collected (atomic)
+      updatedAttendee = await Attendee.findOneAndUpdate(
+        { _id: attendee._id, foodStatus: false, entryStatus: true }, // strict conditional
+        {
+          $set: {
+            foodStatus: true,
+            foodScannedAt: new Date()
+          },
+          $unset: { otp: 1 } // clear OTP
+        },
+        { new: true }
+      );
+
+      if (!updatedAttendee) {
+        return res.status(400).json({ error: 'Food collection was just processed by another device.' });
+      }
     }
 
     res.status(200).json({

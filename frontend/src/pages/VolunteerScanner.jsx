@@ -126,7 +126,7 @@ export default function VolunteerScanner({ role, onLogout }) {
   // ── OTP ───────────────────────────────────────────────────────────────────
   const handleSendOtp = async (e) => {
     e.preventDefault(); setLoading(true); setScanResult(null); setErrorMsg(null);
-    try { await api.post('/otp/send', { roll: roll.trim() }); setOtpSent(true); }
+    try { await api.post('/otp/send', { roll: roll.trim(), type: scanType }); setOtpSent(true); }
     catch (err) { setErrorMsg(err.response?.data?.error || 'Failed to send OTP.'); }
     finally { setLoading(false); }
   };
@@ -134,7 +134,7 @@ export default function VolunteerScanner({ role, onLogout }) {
   const handleVerifyOtp = async (e) => {
     e.preventDefault(); setLoading(true); setScanResult(null); setErrorMsg(null);
     try {
-      const { data } = await api.post('/otp/verify', { roll: roll.trim(), otp: otp.trim() });
+      const { data } = await api.post('/otp/verify', { roll: roll.trim(), otp: otp.trim(), type: scanType });
       setScanResult({ name: data.name, roll: roll.trim() });
       setScanCount(c => c + 1); playTone(880, 1320, 0.2);
       setRoll(''); setOtp(''); setOtpSent(false);
@@ -175,18 +175,16 @@ export default function VolunteerScanner({ role, onLogout }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {/* Hide OTP for food distribution as it's typically QR-only or needs separate logic */}
-          {scanType === 'entry' && (
-            <button
-              onClick={() => { setUseOtp(v => !v); setScanResult(null); setErrorMsg(null); readyForNext(); }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 border ${
-                useOtp ? 'bg-brand-500/20 text-brand-400 border-brand-500/30'
-                      : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-              }`}
-            >
-              {useOtp ? <><ScanLine size={13}/> QR</> : <><Lock size={13}/> OTP</>}
-            </button>
-          )}
+          {/* OTP fallback button available for both entry and food scanners */}
+          <button
+            onClick={() => { setUseOtp(v => !v); setScanResult(null); setErrorMsg(null); readyForNext(); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 border ${
+              useOtp ? 'bg-brand-500/20 text-brand-400 border-brand-500/30'
+                    : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+            }`}
+          >
+            {useOtp ? <><ScanLine size={13}/> QR</> : <><Lock size={13}/> OTP</>}
+          </button>
           {onLogout && (
             <button onClick={onLogout} className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-red-400 transition active:scale-95 border border-slate-700">
               <LogOut size={16} />
