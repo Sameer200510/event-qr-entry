@@ -1,31 +1,68 @@
-import { useState, useEffect } from 'react';
-import { Upload, FileSpreadsheet, Download, Settings, Loader2, Mail, CheckCircle2, User, Users, Send, MessageSquare, Clock, Check, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import {
+  Upload, FileSpreadsheet, Download, Loader2, Mail, CheckCircle2,
+  Users, Send, RefreshCw, Search, Filter, Moon, Sun, LogOut,
+  ChevronDown, ScanLine, Utensils, Clock, AlertCircle, X, MessageSquare
+} from 'lucide-react';
 import api from '../utils/api';
+import { useTheme } from '../context/ThemeContext';
+import { useToast } from '../context/ToastContext';
 
-export default function AdminDashboard() {
-  const [file, setFile] = useState(null);
-  const [headers, setHeaders] = useState([]);
-  const [mapping, setMapping] = useState({ name: '', roll: '', email: '' });
-  const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [attendees, setAttendees] = useState([]);
-  const [emailLoading, setEmailLoading] = useState(null); 
+/* ── Small reusable Stat Card ────────────────────────────────────── */
+function StatCard({ label, value, color, icon }) {
+  return (
+    <div className="stat-card" style={{ position: 'relative', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+        <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
+          {label}
+        </p>
+        <div style={{ color, opacity: 0.7 }}>{icon}</div>
+      </div>
+      <p style={{ fontSize: '2rem', fontWeight: 900, color, margin: 0, lineHeight: 1 }}>{value}</p>
+    </div>
+  );
+}
+
+/* ── Status Badge ────────────────────────────────────────────────── */
+function StatusBadge({ done, doneLabel = 'Done', pendingLabel = 'Pending', time }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+      <span className={`badge ${done ? 'badge-green' : 'badge-muted'}`}>
+        {done ? `✓ ${doneLabel}` : `○ ${pendingLabel}`}
+      </span>
+      {time && (
+        <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+          {new Date(time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </span>
+      )}
+    </div>
+  );
+}
+
+export default function AdminDashboard({ onLogout }) {
+  const [file, setFile]               = useState(null);
+  const [headers, setHeaders]         = useState([]);
+  const [mapping, setMapping]         = useState({ name: '', roll: '', email: '' });
+  const [step, setStep]               = useState(1);
+  const [loading, setLoading]         = useState(false);
+  const [error, setError]             = useState(null);
+  const [attendees, setAttendees]     = useState([]);
+  const [emailLoading, setEmailLoading] = useState(null);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [customMessage, setCustomMessage] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterEntry, setFilterEntry] = useState('all'); // all, entry_done, entry_pending
-  const [filterFood, setFilterFood] = useState('all');   // all, food_done, food_pending
+  const [searchTerm, setSearchTerm]   = useState('');
+  const [filterEntry, setFilterEntry] = useState('all');
+  const [filterFood, setFilterFood]   = useState('all');
+  const [showEmailConfig, setShowEmailConfig] = useState(false);
 
-  useEffect(() => {
-    fetchAttendees();
-  }, []);
+  const { dark, setDark } = useTheme();
+  const { toast } = useToast();
+
+  useEffect(() => { fetchAttendees(); }, []);
 
   const fetchAttendees = async () => {
     try {
-      console.log('Fetching attendees from API...');
       const { data } = await api.get('/attendees');
-      console.log('Received attendees data:', data);
       setAttendees(data);
     } catch (err) {
       console.error('Failed to fetch attendees:', err);
@@ -35,16 +72,12 @@ export default function AdminDashboard() {
   const handleFileChange = async (e) => {
     const selected = e.target.files[0];
     if (!selected) return;
-    setFile(selected);
-    setError(null);
-    setLoading(true);
-
+    setFile(selected); setError(null); setLoading(true);
     try {
       const formData = new FormData();
       formData.append('file', selected);
       const { data } = await api.post('/attendees/parse-excel', formData);
       setHeaders(data.headers);
-      
       const newMapping = { name: '', roll: '', email: '' };
       data.headers.forEach(h => {
         const lower = h.toLowerCase();
@@ -52,154 +85,190 @@ export default function AdminDashboard() {
         if (lower.includes('roll') || lower.includes('id')) newMapping.roll = h;
         if (lower.includes('mail')) newMapping.email = h;
       });
-      setMapping(newMapping);
-      setStep(2);
+      setMapping(newMapping); setStep(2);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to parse Excel file.');
-      setFile(null);
-      setStep(1);
-    } finally {
-      setLoading(false);
-    }
+      setFile(null); setStep(1);
+    } finally { setLoading(false); }
   };
 
   const handleUpload = async () => {
-    if (!mapping.name || !mapping.roll) {
-      setError('Name and Roll mapping are required!');
-      return;
-    }
-    setError(null);
-    setLoading(true);
+    if (!mapping.name || !mapping.roll) { setError('Name and Roll mapping are required!'); return; }
+    setError(null); setLoading(true);
     try {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('mapping', JSON.stringify(mapping));
-      
-      const response = await api.post('/attendees/upload-excel', formData, {
-        responseType: 'blob'
-      });
-
+      const response = await api.post('/attendees/upload-excel', formData, { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `Processed_Attendees_${Date.now()}.zip`);
-      document.body.appendChild(link);
-      link.click();
-      link.parentNode.removeChild(link);
-      
-      setStep(3);
-      fetchAttendees();
-    } catch (err) {
+      link.href = url; link.setAttribute('download', `QR_Codes_${Date.now()}.zip`);
+      document.body.appendChild(link); link.click(); link.parentNode.removeChild(link);
+      setStep(3); fetchAttendees();
+      toast({ type: 'success', message: 'QR codes generated and downloaded!' });
+    } catch {
       setError('Failed to upload and process Excel file.');
-    } finally {
-      setLoading(false);
-    }
+      toast({ type: 'error', message: 'Upload failed. Please try again.' });
+    } finally { setLoading(false); }
   };
 
   const handleSendManualEmail = async (id) => {
     setEmailLoading(id);
     try {
       await api.post(`/attendees/send-email/${id}`, { message: customMessage });
-      fetchAttendees(); // Refresh to show "Sent" status
+      fetchAttendees();
+      toast({ type: 'success', message: 'QR email sent successfully!' });
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to send email');
-    } finally {
-      setEmailLoading(null);
-    }
+      toast({ type: 'error', message: err.response?.data?.error || 'Failed to send email' });
+    } finally { setEmailLoading(null); }
   };
 
   const handleSendBulkEmails = async () => {
-    if (!confirm(`Are you sure you want to send QR emails to ${attendees.filter(a => !a.emailSent).length} pending attendees?`)) return;
+    const pending = attendees.filter(a => !a.emailSent).length;
+    if (pending === 0) { toast({ type: 'warning', message: 'All emails already sent!' }); return; }
+    if (!window.confirm(`Send QR emails to ${pending} pending attendees?`)) return;
     setBulkLoading(true);
     try {
       const { data } = await api.post('/attendees/send-bulk', { message: customMessage });
-      alert(data.message);
+      toast({ type: 'success', message: data.message || 'Bulk emails sent!' });
       fetchAttendees();
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to start bulk email process');
-    } finally {
-      setBulkLoading(false);
-    }
+      toast({ type: 'error', message: err.response?.data?.error || 'Failed to send bulk emails' });
+    } finally { setBulkLoading(false); }
   };
 
-  const resetState = () => {
-    setFile(null);
-    setHeaders([]);
-    setStep(1);
+  const resetState = () => { setFile(null); setHeaders([]); setStep(1); setError(null); };
+
+  // Filtered attendees
+  const filtered = attendees.filter(a => {
+    const s = searchTerm.toLowerCase();
+    const matchSearch = a.name.toLowerCase().includes(s) || a.roll.toLowerCase().includes(s);
+    const matchEntry = filterEntry === 'all' || (filterEntry === 'done' ? a.entryStatus : !a.entryStatus);
+    const matchFood  = filterFood  === 'all' || (filterFood  === 'done' ? a.foodStatus  : !a.foodStatus);
+    return matchSearch && matchEntry && matchFood;
+  });
+
+  const stats = {
+    total: attendees.length,
+    entry: attendees.filter(a => a.entryStatus).length,
+    food:  attendees.filter(a => a.foodStatus).length,
+    pending: attendees.filter(a => !a.entryStatus).length,
+  };
+
+  const S = {
+    page:    { minHeight: '100vh', background: 'var(--bg)', fontFamily: 'Inter, sans-serif' },
+    header:  {
+      background: 'var(--surface)', borderBottom: '1px solid var(--border)',
+      padding: '0 1.5rem', height: 60, display: 'flex', alignItems: 'center',
+      justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50,
+      boxShadow: 'var(--shadow-sm)'
+    },
+    content: { maxWidth: 1200, margin: '0 auto', padding: '1.5rem 1rem 6rem' },
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-10">
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight">Admin Dashboard</h2>
-          <p className="text-slate-500 mt-1">Manage attendees and distribute entry QR codes.</p>
+    <div style={S.page}>
+      {/* ── Top Header ── */}
+      <header style={S.header}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: 8,
+            background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <ScanLine size={16} color="#fff" />
+          </div>
+          <span style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--text-primary)' }}>Admin Dashboard</span>
         </div>
-      </div>
-
-      {error && (
-        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded shadow-sm text-red-700 animate-in slide-in-from-top">
-          <p className="font-semibold">Error</p>
-          <p>{error}</p>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button onClick={() => setDark(!dark)} className="btn-icon" aria-label="Toggle theme">
+            {dark ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+          <button onClick={fetchAttendees} className="btn-icon" title="Refresh">
+            <RefreshCw size={16} />
+          </button>
+          <button onClick={onLogout} className="btn btn-sm btn-secondary" style={{ gap: '0.375rem' }}>
+            <LogOut size={14} /> Logout
+          </button>
         </div>
-      )}
+      </header>
 
-      {/* Main Upload Section */}
-      <div className="grid lg:grid-cols-3 gap-8">
-        <div className="glass-panel p-6 space-y-6 h-fit">
-          <h3 className="font-bold text-slate-700 border-b pb-2 flex items-center gap-2">
-            <Upload size={18} className="text-brand-600" />
-            Bulk Import
-          </h3>
-          <ul className="space-y-4">
-            <li className={`flex gap-3 items-center ${step >= 1 ? 'text-brand-600 font-semibold' : 'text-slate-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${step >= 1 ? 'border-brand-500 bg-brand-50 text-brand-600' : 'border-slate-300'}`}>1</div>
-              Upload Excel
-            </li>
-            <li className={`flex gap-3 items-center ${step >= 2 ? 'text-brand-600 font-semibold' : 'text-slate-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${step >= 2 ? 'border-brand-500 bg-brand-50 text-brand-600' : 'border-slate-300'}`}>2</div>
-              Map Columns
-            </li>
-            <li className={`flex gap-3 items-center ${step >= 3 ? 'text-brand-600 font-semibold' : 'text-slate-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${step >= 3 ? 'border-brand-500 bg-brand-50 text-brand-600' : 'border-slate-300'}`}>3</div>
-              Done
-            </li>
-          </ul>
+      <main style={S.content}>
+        {/* ── Stats Row ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.875rem', marginBottom: '1.5rem' }}>
+          <StatCard label="Total Attendees" value={stats.total} color="var(--brand)" icon={<Users size={20} />} />
+          <StatCard label="Admitted" value={stats.entry} color="var(--green)" icon={<ScanLine size={20} />} />
+          <StatCard label="Food Served" value={stats.food} color="var(--amber)" icon={<Utensils size={20} />} />
+          <StatCard label="Pending Entry" value={stats.pending} color="var(--red)" icon={<AlertCircle size={20} />} />
         </div>
 
-        <div className="glass-panel p-6 md:p-8 lg:col-span-2 min-h-[300px] flex flex-col justify-center">
+        {/* ── Upload Section ── */}
+        <div className="card" style={{ padding: '1.5rem', marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginBottom: '1.25rem' }}>
+            <Upload size={18} style={{ color: 'var(--brand)' }} />
+            <h2 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Bulk Import</h2>
+            {/* Step indicators */}
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.375rem' }}>
+              {[1,2,3].map(s => (
+                <div key={s} style={{
+                  width: 28, height: 28, borderRadius: '50%', fontSize: '0.75rem', fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: step >= s ? 'var(--brand)' : 'var(--surface-2)',
+                  color: step >= s ? '#fff' : 'var(--text-muted)',
+                  border: `2px solid ${step >= s ? 'var(--brand)' : 'var(--border)'}`
+                }}>{s}</div>
+              ))}
+            </div>
+          </div>
+
+          {error && (
+            <div style={{
+              background: 'var(--red-light)', color: 'var(--red)', borderRadius: 10,
+              padding: '0.75rem 1rem', fontSize: '0.875rem', fontWeight: 500,
+              display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem'
+            }}>
+              <AlertCircle size={16} />{error}
+            </div>
+          )}
+
           {step === 1 && (
-            <div className="text-center space-y-6 py-6">
-              <div className="mx-auto w-20 h-20 bg-brand-50 rounded-2xl flex items-center justify-center text-brand-600 mb-4 transition-transform hover:rotate-3 hover:scale-110 duration-300 shadow-sm">
-                {loading ? <Loader2 className="animate-spin w-10 h-10" /> : <Upload className="w-10 h-10" />}
+            <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
+              <div style={{
+                width: 64, height: 64, borderRadius: 16, background: 'var(--brand-light)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem',
+                color: 'var(--brand)'
+              }}>
+                {loading ? <Loader2 size={32} className="animate-spin" /> : <FileSpreadsheet size={32} />}
               </div>
-              <div>
-                <h3 className="text-xl font-bold text-slate-800">Upload Dataset</h3>
-                <p className="text-slate-500 text-sm mt-1">Select an Excel file (.xlsx) with attendee details.</p>
-              </div>
-              <label className="cursor-pointer inline-flex items-center gap-2 bg-slate-900 text-white px-8 py-3 rounded-xl font-medium hover:bg-slate-800 transition active:scale-95 shadow-lg">
-                <FileSpreadsheet size={20} />
-                <span>Browse File</span>
-                <input type="file" className="hidden" accept=".xlsx,.xls" onChange={handleFileChange} disabled={loading} />
+              <h3 style={{ fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 0.375rem' }}>Upload Excel File</h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: '0 0 1.5rem' }}>
+                Select a .xlsx file with attendee details
+              </p>
+              <label style={{ cursor: 'pointer' }}>
+                <span className="btn btn-primary" style={{ pointerEvents: 'none' }}>
+                  <Upload size={16} /> Choose File
+                </span>
+                <input type="file" className="hidden" accept=".xlsx,.xls" onChange={handleFileChange} disabled={loading} style={{ display: 'none' }} />
               </label>
             </div>
           )}
 
           {step === 2 && (
-            <div className="space-y-6 animate-in slide-in-from-right fade-in duration-300">
-              <div className="flex items-center gap-3 border-b pb-4">
-                <Settings className="text-brand-600" />
-                <h3 className="text-xl font-bold text-slate-800">Map Columns</h3>
-              </div>
-              
-              <div className="space-y-4 bg-slate-50 p-6 rounded-2xl border border-slate-100">
+            <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <h3 style={{ fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Filter size={16} style={{ color: 'var(--brand)' }} /> Map Columns
+              </h3>
+              <div style={{ background: 'var(--surface-2)', borderRadius: 12, padding: '1.125rem', display: 'flex', flexDirection: 'column', gap: '0.875rem', border: '1px solid var(--border)' }}>
                 {Object.keys(mapping).map(key => (
-                  <div key={key} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <label className="font-semibold text-slate-700 min-w-24 capitalize">{key} {key!=='email' && <span className="text-red-500">*</span>}</label>
-                    <select 
-                      className="flex-1 max-w-sm px-4 py-2.5 rounded-xl border border-slate-300 outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer bg-white"
-                      value={mapping[key]} 
-                      onChange={(e) => setMapping({...mapping, [key]: e.target.value})}
+                  <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <label style={{ width: 60, fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.875rem', textTransform: 'capitalize', flexShrink: 0 }}>
+                      {key} {key !== 'email' && <span style={{ color: 'var(--red)' }}>*</span>}
+                    </label>
+                    <select
+                      className="input select"
+                      style={{ flex: 1, minWidth: 140 }}
+                      value={mapping[key]}
+                      onChange={e => setMapping({ ...mapping, [key]: e.target.value })}
                     >
                       <option value="">-- Select Column --</option>
                       {headers.map(h => <option key={h} value={h}>{h}</option>)}
@@ -207,244 +276,194 @@ export default function AdminDashboard() {
                   </div>
                 ))}
               </div>
-
-              <div className="pt-4 flex gap-4">
-                <button onClick={resetState} className="secondary-button">Cancel</button>
-                <button 
-                  onClick={handleUpload}
-                  disabled={loading}
-                  className="premium-button flex-1"
-                >
-                  {loading ? <Loader2 className="animate-spin w-5 h-5"/> : 'Process & Generate QRs'}
+              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <button onClick={resetState} className="btn btn-secondary" style={{ flex: 1, minWidth: 120 }}>Cancel</button>
+                <button onClick={handleUpload} disabled={loading} className="btn btn-primary" style={{ flex: 2, minWidth: 180 }}>
+                  {loading ? <><Loader2 size={16} className="animate-spin" /> Processing…</> : <><Download size={16} /> Generate QR Codes</>}
                 </button>
               </div>
             </div>
           )}
 
           {step === 3 && (
-            <div className="text-center space-y-6 py-6 animate-in zoom-in-95 fade-in duration-500">
-              <div className="mx-auto w-20 h-20 bg-green-100 rounded-2xl flex items-center justify-center text-green-600 mb-4 shadow-sm">
-                <CheckCircle2 className="w-12 h-12" />
+            <div className="animate-slide-up" style={{ textAlign: 'center', padding: '1.5rem 1rem' }}>
+              <div style={{
+                width: 64, height: 64, borderRadius: 16, background: 'var(--green-light)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem', color: 'var(--green)'
+              }}>
+                <CheckCircle2 size={36} />
               </div>
-              <div>
-                <h3 className="text-2xl font-bold text-slate-800">Success!</h3>
-                <p className="text-slate-500 mt-2">QR codes have been generated. You can now send them manually from the list below.</p>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-3 justify-center mt-6">
-                <button onClick={resetState} className="secondary-button">Upload Another</button>
-                <button onClick={() => {
-                  const element = document.getElementById('attendee-list');
-                  element?.scrollIntoView({ behavior: 'smooth' });
-                }} className="premium-button">View Attendee List</button>
+              <h3 style={{ fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 0.375rem' }}>Done!</h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: '0 0 1.25rem' }}>
+                QR codes generated and downloaded. Send emails from the list below.
+              </p>
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                <button onClick={resetState} className="btn btn-secondary">Upload Another</button>
+                <button onClick={() => document.getElementById('attendee-list')?.scrollIntoView({ behavior: 'smooth' })} className="btn btn-primary">
+                  View List ↓
+                </button>
               </div>
             </div>
           )}
         </div>
-      </div>
 
-      {/* Email Configuration Section */}
-      <div className="glass-panel p-6 md:p-8 space-y-6">
-        <div className="flex items-center gap-3 border-b pb-4">
-          <MessageSquare className="text-brand-600" />
-          <h3 className="text-xl font-bold text-slate-800">Email Configuration</h3>
-        </div>
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-slate-700">Custom Message (Optional)</label>
-          <textarea 
-            placeholder="Write a message to be included in the QR email... (e.g. Please bring your ID card)"
-            className="w-full h-32 p-4 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-brand-500 resize-none transition-shadow"
-            value={customMessage}
-            onChange={(e) => setCustomMessage(e.target.value)}
-          />
-          <p className="text-xs text-slate-400">This message will appear above the QR code in the email.</p>
-        </div>
-      </div>
-
-      {/* Attendee List Section */}
-      <div id="attendee-list" className="glass-panel p-6 md:p-8 space-y-6">
-        {/* Stats Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl">
-            <p className="text-emerald-600 text-xs font-bold uppercase tracking-wider">Total Admitted</p>
-            <p className="text-emerald-800 text-2xl font-black">{attendees.filter(a => a.entryStatus).length}</p>
-          </div>
-          <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl">
-            <p className="text-amber-600 text-xs font-bold uppercase tracking-wider">Food Distributed</p>
-            <p className="text-amber-800 text-2xl font-black">{attendees.filter(a => a.foodStatus).length}</p>
-          </div>
-          <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl">
-            <p className="text-blue-600 text-xs font-bold uppercase tracking-wider">Pending Entry</p>
-            <p className="text-blue-800 text-2xl font-black">{attendees.filter(a => !a.entryStatus).length}</p>
-          </div>
-          <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl">
-            <p className="text-slate-600 text-xs font-bold uppercase tracking-wider">Total Attendees</p>
-            <p className="text-slate-800 text-2xl font-black">{attendees.length}</p>
-          </div>
-        </div>
-
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-6">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-brand-50 text-brand-600 rounded-lg">
-              <Users size={24} />
+        {/* ── Email Config (collapsible) ── */}
+        <div className="card" style={{ marginBottom: '1.25rem', overflow: 'hidden' }}>
+          <button
+            onClick={() => setShowEmailConfig(v => !v)}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '1rem 1.5rem', background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--text-primary)'
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, fontSize: '0.9375rem' }}>
+              <MessageSquare size={16} style={{ color: 'var(--brand)' }} /> Email Configuration
+            </span>
+            <ChevronDown size={18} style={{ color: 'var(--text-muted)', transform: showEmailConfig ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+          </button>
+          {showEmailConfig && (
+            <div className="animate-fade-in" style={{ padding: '0 1.5rem 1.5rem' }}>
+              <hr className="divider" style={{ marginBottom: '1.25rem' }} />
+              <label className="input-label" htmlFor="custom-msg">Custom Message (Optional)</label>
+              <textarea
+                id="custom-msg"
+                className="input"
+                style={{ height: 100, resize: 'vertical' }}
+                placeholder="Write a message to include in the QR email…"
+                value={customMessage}
+                onChange={e => setCustomMessage(e.target.value)}
+              />
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '0.375rem' }}>
+                This message appears above the QR code in the email.
+              </p>
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+                <button
+                  onClick={handleSendBulkEmails}
+                  disabled={bulkLoading || attendees.filter(a => !a.emailSent).length === 0}
+                  className="btn btn-primary"
+                  style={{ flex: 1, minWidth: 160 }}
+                >
+                  {bulkLoading ? <><Loader2 size={16} className="animate-spin" /> Sending…</> : <><Send size={16} /> Bulk Send ({attendees.filter(a => !a.emailSent).length} pending)</>}
+                </button>
+              </div>
             </div>
+          )}
+        </div>
+
+        {/* ── Attendee List ── */}
+        <div id="attendee-list" className="card" style={{ overflow: 'hidden' }}>
+          {/* Toolbar */}
+          <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', justifyContent: 'space-between' }}>
             <div>
-              <h3 className="text-xl font-bold text-slate-800">Attendee List & Status</h3>
-              <p className="text-sm text-slate-500">{attendees.length} total entries</p>
+              <h2 style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--text-primary)', margin: 0 }}>Attendee List</h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0.125rem 0 0', fontWeight: 500 }}>
+                {filtered.length} of {attendees.length} shown
+              </p>
             </div>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <button 
-              onClick={handleSendBulkEmails} 
-              disabled={bulkLoading || attendees.filter(a => !a.emailSent).length === 0}
-              className="premium-button bg-brand-600 hover:bg-brand-700 text-sm py-2 px-4 flex items-center gap-2 shadow-md transition-all active:scale-95"
-            >
-              {bulkLoading ? <Loader2 className="animate-spin w-4 h-4" /> : <Send size={16} />}
-              Bulk Emails
-            </button>
-            <button onClick={fetchAttendees} className="secondary-button text-sm py-2 px-4">
-              Refresh
+            <button onClick={fetchAttendees} className="btn btn-sm btn-secondary">
+              <RefreshCw size={14} /> Refresh
             </button>
           </div>
-        </div>
 
-        {/* Search & Filters */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
-          <input 
-            type="text" 
-            placeholder="Search by name or roll..."
-            className="px-4 py-2.5 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-brand-500 text-sm"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          <select 
-            className="px-4 py-2.5 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-brand-500 text-sm bg-white"
-            value={filterEntry}
-            onChange={(e) => setFilterEntry(e.target.value)}
-          >
-            <option value="all">Entry: All</option>
-            <option value="entry_done">Entry: Done</option>
-            <option value="entry_pending">Entry: Pending</option>
-          </select>
-          <select 
-            className="px-4 py-2.5 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-brand-500 text-sm bg-white"
-            value={filterFood}
-            onChange={(e) => setFilterFood(e.target.value)}
-          >
-            <option value="all">Food: All</option>
-            <option value="food_done">Food: Done</option>
-            <option value="food_pending">Food: Pending</option>
-          </select>
-        </div>
+          {/* Filters */}
+          <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <div style={{ flex: '2 1 200px', position: 'relative' }}>
+              <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                className="input"
+                style={{ paddingLeft: '2.25rem' }}
+                type="text"
+                placeholder="Search name or roll…"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <select className="input select" style={{ flex: '1 1 140px' }} value={filterEntry} onChange={e => setFilterEntry(e.target.value)}>
+              <option value="all">Entry: All</option>
+              <option value="done">Entry: Done ✓</option>
+              <option value="pending">Entry: Pending</option>
+            </select>
+            <select className="input select" style={{ flex: '1 1 140px' }} value={filterFood} onChange={e => setFilterFood(e.target.value)}>
+              <option value="all">Food: All</option>
+              <option value="done">Food: Served ✓</option>
+              <option value="pending">Food: Pending</option>
+            </select>
+            {(searchTerm || filterEntry !== 'all' || filterFood !== 'all') && (
+              <button className="btn-icon" onClick={() => { setSearchTerm(''); setFilterEntry('all'); setFilterFood('all'); }} title="Clear filters">
+                <X size={16} />
+              </button>
+            )}
+          </div>
 
-        <div className="overflow-x-auto rounded-xl border border-slate-100 shadow-sm">
-          <table className="w-full text-left border-collapse min-w-[800px]">
-            <thead>
-              <tr className="bg-slate-50 text-slate-600 text-sm font-semibold">
-                <th className="p-4 border-b">Attendee</th>
-                <th className="p-4 border-b">Roll No</th>
-                <th className="p-4 border-b text-center">Entry Status</th>
-                <th className="p-4 border-b text-center">Food Status</th>
-                <th className="p-4 border-b text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {attendees
-                .filter(a => {
-                  const matchesSearch = a.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                                       a.roll.toLowerCase().includes(searchTerm.toLowerCase());
-                  const matchesEntry = filterEntry === 'all' || 
-                                      (filterEntry === 'entry_done' && a.entryStatus) || 
-                                      (filterEntry === 'entry_pending' && !a.entryStatus);
-                  const matchesFood = filterFood === 'all' || 
-                                     (filterFood === 'food_done' && a.foodStatus) || 
-                                     (filterFood === 'food_pending' && !a.foodStatus);
-                  return matchesSearch && matchesEntry && matchesFood;
-                })
-                .length === 0 ? (
-                <tr>
-                  <td colSpan="5" className="p-12 text-center text-slate-400 italic">
-                    No results found matching your filters.
-                  </td>
+          {/* Table */}
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
+              <thead>
+                <tr style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
+                  {['Attendee', 'Roll No', 'Entry Status', 'Food Status', 'Action'].map(h => (
+                    <th key={h} style={{
+                      padding: '0.75rem 1rem', textAlign: h === 'Action' ? 'right' : (h.includes('Status') ? 'center' : 'left'),
+                      fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)',
+                      textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap'
+                    }}>{h}</th>
+                  ))}
                 </tr>
-              ) : (
-                attendees
-                  .filter(a => {
-                    const matchesSearch = a.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                                         a.roll.toLowerCase().includes(searchTerm.toLowerCase());
-                    const matchesEntry = filterEntry === 'all' || 
-                                        (filterEntry === 'entry_done' && a.entryStatus) || 
-                                        (filterEntry === 'entry_pending' && !a.entryStatus);
-                    const matchesFood = filterFood === 'all' || 
-                                       (filterFood === 'food_done' && a.foodStatus) || 
-                                       (filterFood === 'food_pending' && !a.foodStatus);
-                    return matchesSearch && matchesEntry && matchesFood;
-                  })
-                  .map(a => (
-                    <tr key={a._id} className="hover:bg-slate-50 transition-colors group">
-                      <td className="p-4">
-                        <p className="font-semibold text-slate-800">{a.name}</p>
-                        <p className="text-xs text-slate-400">{a.emailSent ? '📧 QR Sent' : '⏳ QR Not Sent'}</p>
-                      </td>
-                      <td className="p-4 text-slate-600 font-medium">{a.roll}</td>
-                      <td className="p-4 text-center">
-                        <div className="flex flex-col items-center gap-1">
-                          <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black uppercase border ${
-                            a.entryStatus 
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
-                              : 'bg-slate-50 text-slate-400 border-slate-100'
-                          }`}>
-                            {a.entryStatus ? 'Checked In' : 'Pending'}
-                          </span>
-                          {a.entryScannedAt && (
-                            <span className="text-[9px] text-slate-400 font-medium">
-                              {new Date(a.entryScannedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="p-4 text-center">
-                        <div className="flex flex-col items-center gap-1">
-                          <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black uppercase border ${
-                            a.foodStatus 
-                              ? 'bg-amber-50 text-amber-700 border-amber-100' 
-                              : 'bg-slate-50 text-slate-400 border-slate-100'
-                          }`}>
-                            {a.foodStatus ? 'Collected' : 'Pending'}
-                          </span>
-                          {a.foodScannedAt && (
-                            <span className="text-[9px] text-slate-400 font-medium">
-                              {new Date(a.foodScannedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="p-4 text-right">
-                        <button
-                          onClick={() => handleSendManualEmail(a._id)}
-                          disabled={!a.email || emailLoading === a._id}
-                          className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
-                            !a.email 
-                              ? 'text-slate-300 cursor-not-allowed bg-slate-50' 
-                              : a.emailSent
-                                ? 'text-brand-600 bg-white border border-brand-200 hover:bg-brand-50'
-                                : 'text-white bg-brand-600 hover:bg-brand-700'
-                          }`}
-                        >
-                          {emailLoading === a._id ? (
-                            <Loader2 className="animate-spin w-3 h-3" />
-                          ) : (
-                            <Mail size={14} />
-                          )}
-                          <span>{a.emailSent ? 'Resend' : 'Send'}</span>
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', fontWeight: 500 }}>
+                      No attendees match your filters.
+                    </td>
+                  </tr>
+                ) : filtered.map((a, idx) => (
+                  <tr key={a._id} style={{
+                    borderBottom: '1px solid var(--border-subtle)',
+                    background: idx % 2 === 0 ? 'transparent' : 'var(--surface-2)',
+                    transition: 'background 0.15s'
+                  }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--brand-light)'}
+                    onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? 'transparent' : 'var(--surface-2)'}
+                  >
+                    <td style={{ padding: '0.875rem 1rem' }}>
+                      <p style={{ fontWeight: 700, color: 'var(--text-primary)', margin: 0, fontSize: '0.9375rem' }}>{a.name}</p>
+                      <p style={{ color: 'var(--text-muted)', fontSize: '0.7rem', margin: '0.125rem 0 0', fontWeight: 500 }}>
+                        {a.emailSent ? '✉️ QR Sent' : '⏳ Email Pending'}
+                      </p>
+                    </td>
+                    <td style={{ padding: '0.875rem 1rem', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.875rem' }}>
+                      {a.roll}
+                    </td>
+                    <td style={{ padding: '0.875rem 1rem', textAlign: 'center' }}>
+                      <StatusBadge done={a.entryStatus} doneLabel="Admitted" pendingLabel="Pending" time={a.entryScannedAt} />
+                    </td>
+                    <td style={{ padding: '0.875rem 1rem', textAlign: 'center' }}>
+                      <StatusBadge done={a.foodStatus} doneLabel="Served" pendingLabel="Pending" time={a.foodScannedAt} />
+                    </td>
+                    <td style={{ padding: '0.875rem 1rem', textAlign: 'right' }}>
+                      <button
+                        onClick={() => handleSendManualEmail(a._id)}
+                        disabled={!a.email || emailLoading === a._id}
+                        className={`btn btn-sm ${a.emailSent ? 'btn-secondary' : 'btn-primary'}`}
+                        title={!a.email ? 'No email registered' : a.emailSent ? 'Resend QR' : 'Send QR'}
+                      >
+                        {emailLoading === a._id
+                          ? <Loader2 size={14} className="animate-spin" />
+                          : <Mail size={14} />}
+                        {a.emailSent ? 'Resend' : 'Send'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      </main>
+
+      {/* Watermark */}
+      <div className="watermark">Designed by SAMEER LOHANI &amp; VARUN DOBHAL</div>
     </div>
   );
 }

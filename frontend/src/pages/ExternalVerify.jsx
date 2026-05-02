@@ -1,93 +1,64 @@
-import { useParams } from 'react-router-dom';
-import { ShieldAlert, User, Hash, CheckCircle2, XCircle } from 'lucide-react';
-import { useState, useEffect } from 'react';
-import api from '../utils/api';
+import { ShieldAlert } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
 
 export default function ExternalVerify() {
-  const { token } = useParams();
-  const [attendee, setAttendee] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    const fetchDetails = async () => {
-      try {
-        // We use the same public endpoint as before, but now it just returns data
-        // Note: We might need to create a specific public API endpoint for this if the legacy one is just HTML
-        // But for now, let's assume we want to show the 'Official Scanner' message anyway.
-        setLoading(false);
-      } catch (err) {
-        setError("Invalid QR Code");
-        setLoading(false);
-      }
-    };
-    fetchDetails();
-  }, [token]);
+  const { dark } = useTheme();
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-      <div className="max-w-md w-full bg-white rounded-[2rem] shadow-2xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
-        {/* Header Section */}
-        <div className="bg-amber-50 p-8 flex flex-col items-center text-center border-b border-amber-100">
-          <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-sm border-2 border-amber-200 mb-6 animate-bounce">
-            <ShieldAlert size={40} className="text-amber-500" />
+    <div style={{
+      minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '1.5rem', background: 'var(--bg)'
+    }}>
+      <div className="card animate-slide-up" style={{ maxWidth: 420, width: '100%', overflow: 'hidden' }}>
+        {/* Top accent */}
+        <div style={{ height: 4, background: 'linear-gradient(90deg, #f59e0b, #ef4444)' }} />
+
+        <div style={{ padding: '2.5rem 2rem', textAlign: 'center' }}>
+          <div style={{
+            width: 72, height: 72, borderRadius: 20, background: 'var(--amber-light)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 1.25rem', color: 'var(--amber)'
+          }}>
+            <ShieldAlert size={36} />
           </div>
-          <h1 className="text-2xl font-black text-slate-900 mb-2">Official Scanner Required</h1>
-          <p className="text-slate-600 font-medium">
-            This QR code must be scanned through our <span className="text-amber-600 font-bold">Authorized Platform</span>.
+
+          <h1 style={{ fontSize: '1.375rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 0.5rem' }}>
+            Official Scanner Required
+          </h1>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9375rem', fontWeight: 500, lineHeight: 1.6, margin: '0 0 1.5rem' }}>
+            This QR code must be scanned through our{' '}
+            <span style={{ color: 'var(--amber)', fontWeight: 700 }}>Authorized Platform</span>.
+            Manual scanning is not permitted.
           </p>
-        </div>
 
-        {/* Content Section */}
-        <div className="p-8 space-y-6">
-          <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Verification Info</p>
-            
-            <div className="space-y-4">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center border border-slate-100 shadow-sm">
-                  <User size={18} className="text-slate-400" />
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-400">Attendee Status</p>
-                  <p className="text-slate-900 font-bold">Manual Scan Detected</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center border border-slate-100 shadow-sm">
-                  <CheckCircle2 size={18} className="text-emerald-500" />
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-400">Scan Count</p>
-                  <p className="text-emerald-600 font-bold">Not Incremented</p>
-                </div>
-              </div>
-            </div>
+          <div style={{
+            background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 12,
+            padding: '1rem 1.25rem', textAlign: 'left', marginBottom: '1.5rem'
+          }}>
+            <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 0.75rem' }}>
+              Why am I seeing this?
+            </p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', fontWeight: 500, margin: 0, lineHeight: 1.6 }}>
+              To prevent unauthorized access, QR codes can only be processed by event volunteers using the official scanner app. This protects your entry from being misused.
+            </p>
           </div>
 
-          <div className="space-y-4">
-            <div className="p-4 rounded-xl bg-blue-50 border border-blue-100">
-              <p className="text-blue-700 text-sm font-medium leading-relaxed">
-                To prevent unauthorized scans, only scanners used by event volunteers can process this ticket.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="px-8 pb-8">
-          <button 
-            disabled
-            className="w-full py-4 rounded-2xl bg-slate-900 text-white font-bold text-sm opacity-50 cursor-not-allowed"
-          >
-            Entry Not Authorized Here
+          <button disabled style={{
+            width: '100%', padding: '0.875rem', borderRadius: 12, fontWeight: 700,
+            fontSize: '0.9375rem', background: 'var(--surface-2)', color: 'var(--text-muted)',
+            border: '1px solid var(--border)', cursor: 'not-allowed', opacity: 0.7
+          }}>
+            Scanning Not Available Here
           </button>
-          <p className="text-center mt-4 text-slate-400 text-[11px] font-medium">
+
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '1rem', fontWeight: 500 }}>
             Contact an event volunteer for assistance.
           </p>
         </div>
       </div>
+
+      {/* Watermark */}
+      <div className="watermark">Designed by SAMEER LOHANI &amp; VARUN DOBHAL</div>
     </div>
   );
 }

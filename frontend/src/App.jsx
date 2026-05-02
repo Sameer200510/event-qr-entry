@@ -1,5 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import { ThemeProvider } from './context/ThemeContext';
+import { ToastProvider } from './context/ToastContext';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
 import VolunteerScanner from './pages/VolunteerScanner';
@@ -17,37 +19,29 @@ function App() {
   const isVolunteer = role === 'Volunteer' || role === 'EntryVolunteer' || role === 'FoodVolunteer';
 
   return (
-    <Router>
-      <div className="min-h-screen bg-dynamic">
-        {/* Hide the main header for volunteers on mobile (they have their own compact header) */}
-        {role && !isVolunteer && (
-          <header className="bg-white shadow-sm sticky top-0 z-50">
-            <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-              <h1 className="font-bold text-xl text-brand-600 hidden sm:block">Event QR System</h1>
-              <div className="flex items-center gap-4 text-sm font-medium">
-                <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full border border-slate-200">
-                  {role}
-                </span>
-                <button
-                  onClick={handleLogout}
-                  className="text-red-500 hover:text-red-700 transition"
-                >
-                  Logout
-                </button>
-              </div>
-            </div>
-          </header>
-        )}
-        {/* For volunteers on mobile: top-right logout button sits inside VolunteerScanner */}
-        <Routes>
-          <Route path="/" element={<Navigate to={role ? (role === 'Admin' ? '/admin' : '/volunteer') : '/login'} />} />
-          <Route path="/login" element={!role ? <Login setRole={setRole} /> : <Navigate to="/" />} />
-          <Route path="/admin" element={role === 'Admin' ? <AdminDashboard /> : <Navigate to="/" />} />
-          <Route path="/volunteer" element={role ? <VolunteerScanner role={role} onLogout={handleLogout} /> : <Navigate to="/login" />} />
-          <Route path="/verify/:token" element={<ExternalVerify />} />
-        </Routes>
-      </div>
-    </Router>
+    <ThemeProvider>
+      <ToastProvider>
+        <Router>
+          <div className="app-bg">
+            <Routes>
+              <Route path="/"
+                element={<Navigate to={role ? (role === 'Admin' ? '/admin' : '/volunteer') : '/login'} />}
+              />
+              <Route path="/login"
+                element={!role ? <Login setRole={setRole} /> : <Navigate to="/" />}
+              />
+              <Route path="/admin"
+                element={role === 'Admin' ? <AdminDashboard onLogout={handleLogout} /> : <Navigate to="/" />}
+              />
+              <Route path="/volunteer"
+                element={isVolunteer ? <VolunteerScanner role={role} onLogout={handleLogout} /> : <Navigate to="/login" />}
+              />
+              <Route path="/verify/:token" element={<ExternalVerify />} />
+            </Routes>
+          </div>
+        </Router>
+      </ToastProvider>
+    </ThemeProvider>
   );
 }
 
