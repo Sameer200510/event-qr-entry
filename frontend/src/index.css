@@ -1,5 +1,6 @@
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Great+Vibes&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.cdnfonts.com/css/honey-morgan');
 
 /* ── CSS Variables (Light Mode) ───────────────────────────────────── */
 :root {
@@ -334,7 +335,7 @@ select.input {
   position: fixed;
   bottom: 0.875rem;
   right: 1rem;
-  font-family: 'Great Vibes', cursive;
+  font-family: 'Honey Morgan', cursive;
   font-size: 1.05rem;
   font-weight: 600;
   color: var(--text-muted);
