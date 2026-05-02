@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import {
   Upload, FileSpreadsheet, Loader2, Mail, CheckCircle2,
   Users, Send, RefreshCw, Search, Moon, Sun, LogOut,
-  ChevronDown, ScanLine, Utensils, AlertCircle, X, MessageSquare, Filter
+  ChevronDown, ScanLine, Utensils, AlertCircle, X, MessageSquare, Filter,
+  CheckCircle, XCircle, Clock
 } from 'lucide-react';
 import api from '../utils/api';
 import { useTheme } from '../context/ThemeContext';
@@ -52,6 +53,8 @@ export default function AdminDashboard({ onLogout }) {
   const [attendees, setAttendees]     = useState([]);
   const [emailLoading, setEmailLoading] = useState(null);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, success: 0, failed: 0 });
+  const [bulkLogs, setBulkLogs]       = useState([]);
   const [customMessage, setCustomMessage] = useState('');
   const [searchTerm, setSearchTerm]   = useState('');
   const [filterEntry, setFilterEntry] = useState('all');
@@ -111,13 +114,33 @@ export default function AdminDashboard({ onLogout }) {
   };
 
   const handleBulkEmail = async () => {
-    const pending = attendees.filter(a => !a.emailSent).length;
-    if (!pending) { toast({ type: 'warning', message: 'All emails already sent!' }); return; }
-    if (!window.confirm(`Send to ${pending} pending attendees?`)) return;
+    const pending = attendees.filter(a => !a.emailSent && a.email);
+    if (!pending.length) { toast({ type: 'warning', message: 'No pending emails to send!' }); return; }
+    
+    if (!window.confirm(`Start bulk sending to ${pending.length} attendees? This might take a while.`)) return;
+    
     setBulkLoading(true);
-    try { const { data } = await api.post('/attendees/send-bulk', { message: customMessage }); toast({ type: 'success', message: data.message || 'Bulk sent!' }); fetchAttendees(); }
-    catch (err) { toast({ type: 'error', message: err.response?.data?.error || 'Failed' }); }
-    finally { setBulkLoading(false); }
+    setBulkProgress({ current: 0, total: pending.length, success: 0, failed: 0 });
+    setBulkLogs([]);
+    
+    // Process one by one on the frontend for status visibility
+    for (let i = 0; i < pending.length; i++) {
+      const attendee = pending[i];
+      try {
+        await api.post(`/attendees/send-email/${attendee._id}`, { message: customMessage });
+        setBulkProgress(prev => ({ ...prev, current: i + 1, success: prev.success + 1 }));
+        setBulkLogs(prev => [{ roll: attendee.roll, name: attendee.name, status: 'success', time: new Date() }, ...prev].slice(0, 30));
+      } catch (err) {
+        console.error(`Failed to send to ${attendee.roll}:`, err);
+        setBulkProgress(prev => ({ ...prev, current: i + 1, failed: prev.failed + 1 }));
+        setBulkLogs(prev => [{ roll: attendee.roll, name: attendee.name, status: 'error', time: new Date(), error: err.response?.data?.error || 'Failed' }, ...prev].slice(0, 30));
+      }
+      // Small delay to prevent overwhelming the server/SMTP
+      await new Promise(r => setTimeout(r, 600));
+    }
+    
+    toast({ type: 'success', message: 'Bulk email process completed!' });
+    fetchAttendees();
   };
 
   const resetState = () => { setFile(null); setHeaders([]); setStep(1); setError(null); };
@@ -165,7 +188,73 @@ export default function AdminDashboard({ onLogout }) {
           <StatCard label="Pending" value={stats.pending} total={stats.total} color="var(--red)" icon={<AlertCircle size={16}/>} statColor="var(--red)" />
         </div>
 
+        {/* Bulk Status (Floating/Conditional Overlay) */}
+        {bulkLoading && (
+          <div className="card animate-pop-in" style={{ padding: '1.5rem', marginBottom: '1.25rem', border: '2px solid var(--brand)', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <div>
+                <h3 style={{ fontSize: '1rem', fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>Bulk Email Campaign</h3>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.125rem 0 0' }}>Status: {bulkProgress.current === bulkProgress.total ? 'Finished' : 'Processing...'}</p>
+              </div>
+              {bulkProgress.current === bulkProgress.total && (
+                <button onClick={() => setBulkLoading(false)} className="btn-icon" style={{ borderRadius: '50%', background: 'var(--surface-2)' }}><X size={16}/></button>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '0.5rem' }}>
+               <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-secondary)' }}>{bulkProgress.current} of {bulkProgress.total}</span>
+               <span style={{ fontSize: '1.125rem', fontWeight: 900, color: 'var(--brand)' }}>{Math.round((bulkProgress.current / bulkProgress.total) * 100)}%</span>
+            </div>
+            
+            <div className="progress-bar" style={{ height: 10, marginBottom: '1.25rem' }}>
+              <div className="progress-bar-fill" style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%`, background: 'var(--brand)' }} />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem', marginBottom: '1.5rem' }}>
+              <div style={{ background: 'var(--green-light)', borderRadius: 12, padding: '0.875rem', border: '1px solid var(--green)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--green)', marginBottom: '0.25rem' }}>
+                  <CheckCircle size={14}/>
+                  <span style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase' }}>Success</span>
+                </div>
+                <p style={{ fontSize: '1.5rem', fontWeight: 900, color: 'var(--green)', margin: 0 }}>{bulkProgress.success}</p>
+              </div>
+              <div style={{ background: 'var(--red-light)', borderRadius: 12, padding: '0.875rem', border: '1px solid var(--red)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--red)', marginBottom: '0.25rem' }}>
+                  <XCircle size={14}/>
+                  <span style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase' }}>Failed</span>
+                </div>
+                <p style={{ fontSize: '1.5rem', fontWeight: 900, color: 'var(--red)', margin: 0 }}>{bulkProgress.failed}</p>
+              </div>
+            </div>
+
+            {/* Logs List */}
+            <div style={{ background: 'var(--surface-2)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
+               <div style={{ padding: '0.625rem 1rem', background: 'var(--border-subtle)', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border)' }}>
+                 <Clock size={12} style={{ color: 'var(--text-muted)' }}/>
+                 <span style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Recent Activity</span>
+               </div>
+               <div style={{ maxHeight: 180, overflowY: 'auto', padding: '0.5rem' }}>
+                  {bulkLogs.length === 0 ? (
+                    <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', padding: '1rem' }}>No activity yet...</p>
+                  ) : bulkLogs.map((log, idx) => (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0.75rem', borderRadius: 8, background: idx === 0 ? 'var(--surface)' : 'transparent', marginBottom: 2 }}>
+                       {log.status === 'success' ? <CheckCircle2 size={14} color="var(--green)"/> : <AlertCircle size={14} color="var(--red)"/>}
+                       <div style={{ flex: 1 }}>
+                          <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{log.name} ({log.roll})</p>
+                          {log.error && <p style={{ fontSize: '0.65rem', color: 'var(--red)', margin: 0 }}>{log.error}</p>}
+                       </div>
+                       <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+                         {new Date(log.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                       </span>
+                    </div>
+                  ))}
+               </div>
+            </div>
+          </div>
+        )}
+
         {/* Upload */}
+        {!bulkLoading && (
         <div className="card" style={{ padding: '1.5rem', marginBottom: '1.25rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginBottom: '1.125rem' }}>
             <Upload size={17} style={{ color: 'var(--brand)' }}/>
@@ -246,8 +335,10 @@ export default function AdminDashboard({ onLogout }) {
             </div>
           )}
         </div>
+        )}
 
         {/* Email Config */}
+        {!bulkLoading && (
         <div className="card" style={{ marginBottom: '1.25rem', overflow: 'hidden' }}>
           <button onClick={() => setShowEmailConfig(v => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-primary)' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, fontSize: '0.9rem' }}>
@@ -261,12 +352,13 @@ export default function AdminDashboard({ onLogout }) {
               <label className="input-label" htmlFor="custom-msg">Custom Message (Optional)</label>
               <textarea id="custom-msg" className="input" style={{ height: 90, resize: 'vertical' }} placeholder="Message to include above QR in email…" value={customMessage} onChange={e => setCustomMessage(e.target.value)}/>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', margin: '0.375rem 0 1rem' }}>Appears above QR code in the email.</p>
-              <button onClick={handleBulkEmail} disabled={bulkLoading || !attendees.filter(a => !a.emailSent).length} className="btn btn-primary" style={{ width: '100%' }}>
-                {bulkLoading ? <><Loader2 size={15} className="animate-spin"/> Sending…</> : <><Send size={15}/> Bulk Send ({attendees.filter(a => !a.emailSent).length} pending)</>}
+              <button onClick={handleBulkEmail} disabled={bulkLoading || !attendees.filter(a => !a.emailSent && a.email).length} className="btn btn-primary" style={{ width: '100%' }}>
+                <Send size={15}/> Bulk Send ({attendees.filter(a => !a.emailSent && a.email).length} pending)
               </button>
             </div>
           )}
         </div>
+        )}
 
         {/* Attendee List */}
         <div id="alist" className="card" style={{ overflow: 'hidden' }}>
